@@ -1,5 +1,13 @@
 # Shannon-b1
 
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Version-Shannon_b1-red.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Status-Developing-green.svg" alt="Status">
+  <img src="https://img.shields.io/badge/Language-Python-blue.svg" alt="Language">
+</p>
+  
+
 训练损失从 **4.78 降到 3.67**，下降了 **1.11**，比之前 SGD 的效果更好！
 
 ## 📊 训练结果分析
