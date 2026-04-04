@@ -350,7 +350,7 @@ def generate_samples(model, tokenizer, prompts, max_tokens=50, temperature=0.8):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Shannon-b1 改进版训练')
+    parser = argparse.ArgumentParser(description='Shannon-b1 训练')
     
     # 模型配置
     parser.add_argument('--d-model', type=int, default=128, help='模型维度')
