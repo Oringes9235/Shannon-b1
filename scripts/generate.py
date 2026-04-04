@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-文本生成脚本
+文本生成脚本 - 支持 BPE 分词器
 """
 
 import sys
@@ -24,27 +24,28 @@ def load_model(model_path: str, device: str = 'cpu'):
     elif 'model_config' in checkpoint:
         config = checkpoint['model_config']
     else:
-        # 从模型状态字典推断配置
         state_dict = checkpoint['model_state_dict']
         vocab_size = state_dict['token_embedding.weight'].shape[0]
         d_model = state_dict['token_embedding.weight'].shape[1]
         max_seq_len = state_dict['pos_encoding.pe'].shape[1]
-        
-        config = ModelConfig(
-            vocab_size=vocab_size,
-            d_model=d_model,
-            max_seq_len=max_seq_len
-        )
+        config = ModelConfig(vocab_size=vocab_size, d_model=d_model, max_seq_len=max_seq_len)
     
     model = ShannonB1(config).to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     
-    # 加载分词器
+    # 加载分词器 - 自动检测类型
     tokenizer_path = model_path.replace('.pt', '_tokenizer.json')
     if os.path.exists(tokenizer_path):
-        tokenizer = CharTokenizer()
-        tokenizer.load(tokenizer_path)
+        import json
+        with open(tokenizer_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if 'char_to_idx' in data:
+            tokenizer = CharTokenizer()
+            tokenizer.load(tokenizer_path)
+        else:
+            tokenizer = BPETokenizer()
+            tokenizer.load(tokenizer_path)
     else:
         tokenizer = CharTokenizer()
         tokenizer.build_vocab(["sample text"], 1000)
@@ -67,9 +68,11 @@ def main():
     model, tokenizer, config = load_model(args.model_path, args.device)
     
     print(f"Model loaded: vocab_size={config.vocab_size}, d_model={config.d_model}")
+    print(f"Tokenizer type: {'BPE' if hasattr(tokenizer, 'merges') else 'Char'}")
     
     # 编码提示词
     start_tokens = tokenizer.encode(args.prompt)[:50]
+    print(f"Start tokens: {start_tokens}")
     
     # 生成
     with torch.no_grad():

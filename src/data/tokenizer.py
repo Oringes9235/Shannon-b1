@@ -81,9 +81,10 @@ class CharTokenizer:
         self.idx_to_char = {}
         for k, v in self.char_to_idx.items():
             try:
-                self.idx_to_char[int(k)] = v
-            except ValueError:
-                self.idx_to_char[k] = v
+                idx = int(k)
+            except (ValueError, TypeError):
+                idx = k
+            self.idx_to_char[idx] = v
         self.special_tokens = data['special_tokens']
 
 

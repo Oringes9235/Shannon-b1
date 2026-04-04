@@ -25,6 +25,16 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
     
     def forward(self, x):
+        seq_len = x.size(1)
+        if seq_len > self.pe.size(1):
+            # 如果序列更长，扩展位置编码
+            import math
+            import torch
+            new_pe = torch.zeros(seq_len, self.pe.size(2), device=x.device)
+            new_pe[:self.pe.size(1)] = self.pe[0]
+            for i in range(self.pe.size(1), seq_len):
+                new_pe[i] = new_pe[i - 1] + (new_pe[self.pe.size(1)-1] - new_pe[self.pe.size(1)-2])
+            self.pe = new_pe.unsqueeze(0)
         x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)
 
