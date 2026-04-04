@@ -1,6 +1,6 @@
 from src.model import ShannonB1, ModelConfig
-from src.data import TextDataset, CharTokenizer, BPETokenizer
-from src.training import Trainer
+from src.data import TextDataset, CharTokenizer, BPETokenizer, create_tokenizer
+from src.training import ImprovedTrainer
 
 __all__ = [
     'ShannonB1',
@@ -8,5 +8,6 @@ __all__ = [
     'TextDataset',
     'CharTokenizer',
     'BPETokenizer',
-    'Trainer'
+    'create_tokenizer',
+    'ImprovedTrainer'
 ]

@@ -2,8 +2,8 @@
 模型配置类
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, List
 
 
 @dataclass
@@ -25,9 +25,24 @@ class ModelConfig:
     weight_decay: float = 0.01
     grad_clip: float = 1.0
     
+    # 梯度累积
+    gradient_accumulation_steps: int = 1
+    
+    # 混合精度训练
+    use_amp: bool = True  # 自动混合精度
+    
     # 数据配置
     tokenizer_type: str = "char"  # char, bpe, simple_bpe
     seq_len: int = 64
+    
+    # 早停配置
+    early_stopping_patience: int = 10
+    early_stopping_min_delta: float = 0.001
+    
+    # 日志和保存
+    log_interval: int = 10
+    save_interval: int = 500
+    eval_interval: int = 100
     
     # 其他
     device: str = "cuda"  # cpu, cuda
@@ -36,6 +51,7 @@ class ModelConfig:
     def __post_init__(self):
         if self.device == "cuda" and not self._has_cuda():
             self.device = "cpu"
+            self.use_amp = False
     
     @staticmethod
     def _has_cuda():
@@ -54,8 +70,6 @@ class ModelConfig:
 class TrainingConfig:
     """训练配置"""
     epochs: int = 50
-    log_interval: int = 10
-    eval_interval: int = 100
-    save_interval: int = 500
     save_path: str = "checkpoints/shannon_b1.pt"
     resume_from: Optional[str] = None
+    tensorboard_dir: str = "runs/shannon_b1"
