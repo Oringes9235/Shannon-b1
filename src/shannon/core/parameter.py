@@ -1,21 +1,25 @@
 """
-可训练参数包装类
+可训练参数包装类 - 优化版本
 """
 
 import numpy as np
 
 
 class Parameter:
-    """
-    可训练参数，包装 numpy 数组并添加梯度
-    """
+    """可训练参数，包装 numpy 数组并添加梯度"""
     
-    def __init__(self, data):
-        """
-        data: numpy 数组
-        """
-        self.data = data
+    __slots__ = ('data', 'grad', 'name')
+    
+    def __init__(self, data, name=None):
+        if isinstance(data, np.ndarray):
+            if data.dtype == np.float64:
+                self.data = data.astype(np.float32)
+            else:
+                self.data = data
+        else:
+            self.data = np.array(data, dtype=np.float32)
         self.grad = None
+        self.name = name
     
     @property
     def shape(self):
@@ -73,51 +77,64 @@ class Parameter:
             self.data /= other
         return self
     
+    def __neg__(self):
+        return Parameter(-self.data)
+    
+    def __pos__(self):
+        return Parameter(self.data)
+    
     def __repr__(self):
         return f"Parameter(shape={self.shape}, dtype={self.dtype})"
     
     def numpy(self):
-        """返回原始 numpy 数组"""
         return self.data
     
     def zero_grad(self):
-        """清零梯度"""
         self.grad = None
     
     def copy(self):
-        """复制参数"""
         return Parameter(self.data.copy())
+    
+    def to(self, dtype):
+        self.data = self.data.astype(dtype)
+        if self.grad is not None:
+            self.grad = self.grad.astype(dtype)
+        return self
 
 
 def as_parameter(arr):
-    """将 numpy 数组转换为 Parameter"""
     if isinstance(arr, Parameter):
         return arr
-    return Parameter(arr.copy() if isinstance(arr, np.ndarray) else Parameter(np.array(arr)))
+    return Parameter(arr.copy() if isinstance(arr, np.ndarray) else np.array(arr))
 
 
 def to_numpy(param):
-    """将 Parameter 转换回 numpy 数组"""
     if isinstance(param, Parameter):
         return param.data
     return param
 
 
 def zeros(shape):
-    """创建全零参数"""
-    return Parameter(np.zeros(shape))
+    return Parameter(np.zeros(shape, dtype=np.float32))
 
 
 def ones(shape):
-    """创建全一参数"""
-    return Parameter(np.ones(shape))
+    return Parameter(np.ones(shape, dtype=np.float32))
 
 
 def random_uniform(low, high, shape):
-    """创建随机均匀分布参数"""
-    return Parameter(np.random.uniform(low, high, shape))
+    return Parameter(np.random.uniform(low, high, shape).astype(np.float32))
 
 
-def random_normal(mean=0, std=1, shape=None):
-    """创建随机正态分布参数"""
-    return Parameter(np.random.normal(mean, std, shape))
+def random_normal(mean, std, shape):
+    return Parameter(np.random.normal(mean, std, shape).astype(np.float32))
+
+
+def xavier_init(shape_in, shape_out):
+    limit = np.sqrt(6.0 / (shape_in + shape_out))
+    return Parameter(np.random.uniform(-limit, limit, (shape_in, shape_out)).astype(np.float32))
+
+
+def he_init(shape_in, shape_out):
+    std = np.sqrt(2.0 / shape_in)
+    return Parameter(np.random.normal(0, std, (shape_in, shape_out)).astype(np.float32))
