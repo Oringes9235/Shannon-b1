@@ -1,6 +1,5 @@
 from .functions import softmax, gelu, gelu_backward, xavier_init
-from .tokenizer import CharTokenizer
-from .bpe_tokenizer import BPETokenizer, SimpleBPETokenizer
+from .tokenizer import CharTokenizer, BPETokenizer, SimpleBPETokenizer
 
 __all__ = [
     'softmax', 'gelu', 'gelu_backward', 'xavier_init',
