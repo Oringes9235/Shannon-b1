@@ -1,0 +1,24 @@
+# Shannon-b1 默认配置
+
+model:
+  vocab_size: 10000
+  d_model: 128
+  num_heads: 8
+  d_ff: 512
+  num_layers: 4
+  max_seq_len: 512
+  dropout: 0.1
+
+training:
+  epochs: 50
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.01
+  grad_clip: 1.0
+  warmup_steps: 1000
+
+data:
+  dataset: shakespeare
+  tokenizer: char
+  vocab_size: 1000
+  seq_len: 64
