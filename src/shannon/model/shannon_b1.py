@@ -58,7 +58,7 @@ class ShannonB1:
         # 1. 词嵌入 + 位置编码
         x = self.token_embedding.data[tokens]  # (batch, seq_len, d_model)
         pos_indices = np.arange(seq_len)
-        x = x + self.position_embedding.data[pos_indices]  # 广播加法
+        x = x + self.position_embedding.data[pos_indices[:self.position_embedding.data.shape[0]]]  # 广播加法
         
         # 缓存嵌入输出
         self.cache = {'tokens': tokens, 'embedding_out': x.copy()}
@@ -116,13 +116,34 @@ class ShannonB1:
         self.position_embedding.grad = d_position_embedding
     
     def generate(self, start_tokens, max_new_tokens, temperature=1.0):
-        tokens = np.array([start_tokens])
+        """
+        自回归生成文本
+        start_tokens: list[int] 起始token序列
+        max_new_tokens: 最多生成多少个新token
+        temperature: 温度系数 (越低越确定，越高越随机)
+        """
+        tokens = np.array([start_tokens])  # (1, seq_len)
+        max_pos = self.position_embedding.data.shape[0]  # 获取位置编码的最大长度
         
         for _ in range(max_new_tokens):
-            logits = self.forward(tokens, training=False)
-            last_logits = logits[0, -1, :] / temperature
+            # 如果序列太长，只使用最后 max_pos 个token
+            if tokens.shape[1] > max_pos:
+                tokens = tokens[:, -max_pos:]
+            
+            # 获取最后一个位置的logits
+            logits = self.forward(tokens, training=False)  # (1, seq_len, vocab_size)
+            last_logits = logits[0, -1, :]  # (vocab_size,)
+            
+            # 温度缩放
+            last_logits = last_logits / temperature
+            
+            # Softmax得到概率
             probs = softmax(last_logits)
+            
+            # 按概率采样下一个token
             next_token = np.random.choice(len(probs), p=probs)
+            
+            # 拼接到序列
             tokens = np.append(tokens, [[next_token]], axis=1)
         
         return tokens[0].tolist()
