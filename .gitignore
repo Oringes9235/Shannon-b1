@@ -16,3 +16,5 @@ backup
 *.pt
 
 shannon_b1.pt
+
+.pytest_cache
