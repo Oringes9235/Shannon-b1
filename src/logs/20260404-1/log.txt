@@ -1,4 +1,4 @@
-PS F:\Shannon-b1\src> python train.py --dataset shakespeare --tokenizer char --vocab-size 1000 --d-model 128 --num-heads 8 --num-layers 4 --epochs 50 --batch-size 32 --seq-len 128 --lr 0.001
+~/Shannon-b1/src> python train.py --dataset shakespeare --tokenizer char --vocab-size 1000 --d-model 128 --num-heads 8 --num-layers 4 --epochs 50 --batch-size 32 --seq-len 128 --lr 0.001
 ============================================================
 Shannon-b1 训练 - 真实文本数据版本
 ============================================================
