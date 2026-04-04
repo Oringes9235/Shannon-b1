@@ -18,3 +18,5 @@ backup
 shannon_b1.pt
 
 .pytest_cache
+
+checkpoints/

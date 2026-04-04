@@ -106,7 +106,8 @@ class ShannonB1(nn.Module):
         max_new_tokens: int, 
         temperature: float = 1.0,
         top_k: Optional[int] = None,
-        top_p: Optional[float] = None
+        top_p: Optional[float] = None,
+        repetition_penalty: float = 1.0
     ) -> List[int]:
         """
         自回归生成文本
@@ -149,6 +150,11 @@ class ShannonB1(nn.Module):
                     
                     indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
                     last_logits = last_logits.masked_fill(indices_to_remove, float('-inf'))
+                
+                # 重复惩罚
+                if repetition_penalty != 1.0:
+                    for token in set(tokens[0].tolist()):
+                        last_logits[token] /= repetition_penalty
                 
                 # Softmax 采样
                 probs = torch.softmax(last_logits, dim=-1)
