@@ -5,3 +5,6 @@ __pycache__
 shakespeare.txt
 
 shannon_b1_*
+
+logs/
+
