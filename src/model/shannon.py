@@ -25,6 +25,7 @@ class ShannonB1(nn.Module):
     
     def __init__(self, config: ModelConfig):
         super().__init__()
+
         self.config = config
         
         # 词嵌入
@@ -56,7 +57,7 @@ class ShannonB1(nn.Module):
         self.ln_f = nn.LayerNorm(config.d_model)
         
         # 输出投影
-        self.output = nn.Linear(config.d_model, config.voc_size)
+        self.output = nn.Linear(config.d_model, config.vocab_size)
         
         # 初始化权重
         self._init_weights()
@@ -163,7 +164,10 @@ class ShannonB1Encoder(nn.Module):
     """编码器版本 (非自回归，用于理解任务)"""
     
     def __init__(self, config: ModelConfig):
+        
         super().__init__()
+
+        self.config = config
         
         self.token_embedding = nn.Embedding(config.vocab_size, config.d_model)
         self.pos_encoding = PositionalEncoding(config.d_model, config.max_seq_len, config.dropout)

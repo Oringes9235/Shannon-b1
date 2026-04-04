@@ -78,7 +78,12 @@ class CharTokenizer:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
-        self.idx_to_char = {int(k): v for k, v in self.char_to_idx.items()}
+        self.idx_to_char = {}
+        for k, v in self.char_to_idx.items():
+            try:
+                self.idx_to_char[int(k)] = v
+            except ValueError:
+                self.idx_to_char[k] = v
         self.special_tokens = data['special_tokens']
 
 
@@ -334,5 +339,10 @@ class SimpleBPETokenizer:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
-        self.idx_to_char = {int(k): v for k, v in self.char_to_idx.items()}
+        self.idx_to_char = {}
+        for k, v in self.char_to_idx.items():
+            try:
+                self.idx_to_char[int(k)] = v
+            except ValueError:
+                self.idx_to_char[k] = v
         self.special_tokens = data['special_tokens']
