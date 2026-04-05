@@ -125,9 +125,4 @@ curl -X POST http://localhost:8000/api/train/stop
 - 后端事件转发依赖 WebSocket 的稳定性；若需更可靠的持久化或日志检索，考虑将训练 stdout 同步写入文件或接入日志队列。
 - 若要扩展前端的训练可视化（例如更细粒度的 batch-level loss），可以在 `scripts/train.py` 中打印约定格式的 JSON 行，然后在 `ui/server/training_worker.py` 中解析并转发为结构化事件。
 
----
 
-如果需要，我可以：
-- 把 README 翻译为英文版；
-- 在 README 中加入示例截图或更详细的 API 示例；
-- 或把“快速测试脚本”添加为 `ui/tools/quick_test.sh`（或 .bat）。
