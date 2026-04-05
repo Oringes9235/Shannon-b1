@@ -1,3 +1,8 @@
 *.py linguist-language=Python
 *.sh linguist-language=Shell
 *.yaml linguist-language=YAML
+*.jsx linguist-language=JavaScript
+*.html linguist-language=HTML
+*.css linguist-language=CSS
+
+
