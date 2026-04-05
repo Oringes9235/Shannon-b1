@@ -1,16 +1,35 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 
+/**
+ * 模型管理组件 - 用于管理和加载机器学习模型
+ * 提供模型加载、检查点管理以及模型信息展示功能
+ * 
+ * @param {Object} props - 组件属性对象
+ * @param {string} props.apiUrl - API服务端点地址
+ * @param {Object} props.status - 包含当前模型状态的对象
+ * @returns {JSX.Element} 模型管理界面组件
+ */
 const ModelManager = ({ apiUrl, status }) => {
+  // 初始化组件状态：检查点列表、模型路径、加载状态和消息提示
   const [checkpoints, setCheckpoints] = useState([])
   const [modelPath, setModelPath] = useState('../../checkpoints/shannon_b1.pt')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
+  // 组件挂载时获取检查点列表
   useEffect(() => {
     fetchCheckpoints()
   }, [])
 
+  /**
+   * 获取可用的模型检查点列表
+   * 从API端点获取所有可用的模型文件信息
+   * 
+   * @async
+   * @function fetchCheckpoints
+   * @returns {void}
+   */
   const fetchCheckpoints = async () => {
     try {
       const res = await axios.get(`${apiUrl}/checkpoints`)
@@ -20,6 +39,14 @@ const ModelManager = ({ apiUrl, status }) => {
     }
   }
 
+  /**
+   * 向后端API发送请求加载指定路径的模型
+   * 显示加载状态并在完成后显示成功或错误消息
+   * 
+   * @async
+   * @function loadModel
+   * @returns {void}
+   */
   const loadModel = async () => {
     setLoading(true)
     setMessage('')

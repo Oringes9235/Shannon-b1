@@ -6,20 +6,24 @@
   font-family: Inter, system-ui, Helvetica, Arial, sans-serif;
 }
 
+/* 自定义滚动条样式 - 设置滚动条的整体尺寸 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
+/* 自定义滚动条轨道样式 - 设置滚动条轨道的背景色 */
 ::-webkit-scrollbar-track {
   background: #1f2937;
 }
 
+/* 自定义滚动条滑块样式 - 设置滚动条滑块的背景色和圆角 */
 ::-webkit-scrollbar-thumb {
   background: #4b5563;
   border-radius: 4px;
 }
 
+/* 自定义滚动条滑块悬停样式 - 设置鼠标悬停时滚动条滑块的背景色 */
 ::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
 }

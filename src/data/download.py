@@ -7,7 +7,16 @@ import urllib.request
 
 
 def download_shakespeare(save_path: str = 'data/shakespeare.txt') -> str:
-    """下载莎士比亚文本"""
+    """
+    下载莎士比亚文本
+    
+    Args:
+        save_path (str): 保存路径，默认为'data/shakespeare.txt'
+        
+    Returns:
+        str: 成功时返回保存路径，失败时返回None
+    """
+    # 创建目录
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
     url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
@@ -24,10 +33,14 @@ def download_shakespeare(save_path: str = 'data/shakespeare.txt') -> str:
 
 
 def load_shakespeare() -> str:
-    """加载莎士比亚文本
+    """
+    加载莎士比亚文本
 
     优先使用本地文件 data/shakespeare.txt（如果存在），否则尝试下载；
     下载失败时使用内置的备用文本。
+    
+    Returns:
+        str: 莎士比亚文本内容
     """
     local_path = 'data/shakespeare.txt'
     if os.path.exists(local_path):
@@ -45,7 +58,16 @@ def load_shakespeare() -> str:
 
 
 def create_sample_data(save_path: str = 'data/sample.txt') -> str:
-    """创建示例数据"""
+    """
+    创建示例数据
+    
+    Args:
+        save_path (str): 保存路径，默认为'data/sample.txt'
+        
+    Returns:
+        str: 保存路径
+    """
+    # 创建目录
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
     sample_text = """Once upon a time, there was a little girl named Alice. She lived in a small village
@@ -57,6 +79,7 @@ beautiful garden full of flowers she had never seen before. In the middle of the
 garden stood a small cottage. An old woman came out and smiled at Alice. "Welcome,"
 she said, "I have been waiting for you." And so began Alice's greatest adventure."""
     
+    # 写入示例文本到文件
     with open(save_path, 'w', encoding='utf-8') as f:
         f.write(sample_text)
     

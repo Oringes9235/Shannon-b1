@@ -19,20 +19,29 @@ from src.utils import set_seed, get_device
 
 
 def parse_args():
+    """
+    解析命令行参数并返回参数对象
+    
+    Returns:
+        argparse.Namespace: 包含所有解析后的命令行参数的对象
+    """
     parser = argparse.ArgumentParser(description='Shannon-b1 Training')
     
+    # 模型架构参数
     parser.add_argument('--d-model', type=int, default=128)
     parser.add_argument('--num-heads', type=int, default=8)
     parser.add_argument('--num-layers', type=int, default=4)
     parser.add_argument('--d-ff', type=int, default=512)
     parser.add_argument('--dropout', type=float, default=0.1)
     
+    # 训练参数
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--seq-len', type=int, default=64)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--grad-accum', type=int, default=1)
     
+    # 高级训练选项
     parser.add_argument('--no-amp', action='store_true')
     parser.add_argument('--warmup-steps', type=int, default=1000)
     parser.add_argument('--gradient-checkpointing', action='store_true', help='Enable gradient checkpointing to save memory')
@@ -42,9 +51,11 @@ def parse_args():
     parser.add_argument('--tie-embeddings', action='store_true', help='Tie token embedding and output projection')
     parser.add_argument('--patience', type=int, default=10)
     
+    # 分词器参数
     parser.add_argument('--tokenizer', type=str, default='char', choices=['char', 'bpe'])
     parser.add_argument('--vocab-size', type=int, default=2000)
     
+    # 系统参数
     parser.add_argument('--device', type=str, default=get_device())
     parser.add_argument('--save-path', type=str, default='checkpoints/shannon_b1.pt')
     parser.add_argument('--seed', type=int, default=42)
@@ -53,6 +64,9 @@ def parse_args():
 
 
 def main():
+    """
+    主训练函数：初始化模型、数据加载器、优化器，并执行完整的训练循环
+    """
     args = parse_args()
     set_seed(args.seed)
     
@@ -72,6 +86,7 @@ def main():
     text = load_shakespeare()
     tokenizer = create_tokenizer(text, args.tokenizer, args.vocab_size)
     
+    # 创建数据集并分割为训练集和验证集
     full_dataset = TextDataset([text], tokenizer, args.seq_len)
     val_size = int(len(full_dataset) * 0.1)
     train_size = len(full_dataset) - val_size

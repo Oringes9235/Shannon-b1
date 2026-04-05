@@ -29,6 +29,17 @@ class ImprovedTrainer:
                  val_dataloader: Optional[DataLoader] = None,
                  config=None, optimizer: Optional[torch.optim.Optimizer] = None,
                  scheduler: Optional = None):
+        """
+        初始化改进版训练器
+        
+        Args:
+            model: 要训练的神经网络模型
+            dataloader: 训练数据的数据加载器
+            val_dataloader: 验证数据的数据加载器，可选
+            config: 训练配置对象
+            optimizer: 优化器，如果为None则创建AdamW优化器
+            scheduler: 学习率调度器，可选
+        """
         self.model = model
         self.dataloader = dataloader
         self.val_dataloader = val_dataloader
@@ -88,7 +99,12 @@ class ImprovedTrainer:
         self.start_time = None
 
     def _autocast(self):
-        """Return a compatible autocast context manager across PyTorch versions."""
+        """
+        返回跨PyTorch版本兼容的autocast上下文管理器
+        
+        Returns:
+            与当前PyTorch版本兼容的自动混合精度上下文管理器
+        """
         if not self.use_amp:
             # no autocast when not using amp
             from contextlib import nullcontext
@@ -103,7 +119,12 @@ class ImprovedTrainer:
             return amp.autocast(device_type=device_type)
     
     def train_epoch(self) -> float:
-        """训练一个epoch (支持混合精度和梯度累积)"""
+        """
+        训练一个epoch (支持混合精度和梯度累积)
+        
+        Returns:
+            当前epoch的平均训练损失
+        """
         self.model.train()
         total_loss = 0
         num_batches = 0
@@ -167,7 +188,12 @@ class ImprovedTrainer:
     
     @torch.no_grad()
     def validate(self) -> float:
-        """验证"""
+        """
+        验证模型性能
+        
+        Returns:
+            验证集上的平均损失
+        """
         if self.val_dataloader is None:
             return 0.0
         
@@ -193,9 +219,12 @@ class ImprovedTrainer:
         """
         计算损失，支持 label smoothing（基于交叉熵的平滑实现）。
 
-        logits: (batch, seq_len, vocab)
-        targets: (batch, seq_len)
-        返回: 标量 loss
+        Args:
+            logits: 模型输出的logits张量，形状为(batch, seq_len, vocab)
+            targets: 目标标签张量，形状为(batch, seq_len)
+
+        Returns:
+            标量损失值
         """
         smoothing = getattr(self.config, 'label_smoothing', 0.0)
         vocab_size = logits.size(-1)
@@ -214,7 +243,15 @@ class ImprovedTrainer:
         return loss.mean()
     
     def should_early_stop(self, val_loss: float) -> bool:
-        """检查是否应该早停"""
+        """
+        检查是否应该早停
+
+        Args:
+            val_loss: 当前验证损失
+
+        Returns:
+            如果满足早停条件返回True，否则返回False
+        """
         if val_loss < self.best_val_loss - self.config.early_stopping_min_delta:
             self.best_val_loss = val_loss
             self.best_epoch = len(self.history['val_loss']) - 1
@@ -225,7 +262,15 @@ class ImprovedTrainer:
             return self.patience_counter >= self.config.early_stopping_patience
     
     def train(self, epochs: int) -> Dict[str, list]:
-        """完整训练循环"""
+        """
+        完整训练循环
+
+        Args:
+            epochs: 训练轮数
+
+        Returns:
+            包含训练历史记录的字典
+        """
         print("\n" + "=" * 70)
         print("🚀 Starting Training")
         print(f"   Device: {self.device.upper()}")
@@ -304,7 +349,12 @@ class ImprovedTrainer:
         return self.history
     
     def save_checkpoint(self, path: str):
-        """保存检查点"""
+        """
+        保存检查点
+
+        Args:
+            path: 检查点保存路径
+        """
         os.makedirs(os.path.dirname(path), exist_ok=True)
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
@@ -321,7 +371,12 @@ class ImprovedTrainer:
         print(f"   💾 Checkpoint saved: {path}")
     
     def load_checkpoint(self, path: str):
-        """加载检查点"""
+        """
+        加载检查点
+
+        Args:
+            path: 检查点文件路径
+        """
         # 尝试显式允许加载包含自定义类的完整检查点（非 weights-only）
         try:
             checkpoint = torch.load(path, map_location=self.device, weights_only=False)

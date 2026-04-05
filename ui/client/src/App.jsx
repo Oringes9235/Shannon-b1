@@ -6,8 +6,14 @@ import TextGenerator from './components/TextGenerator'
 import ModelManager from './components/ModelManager'
 import Layout from './components/Layout'
 
+// API基础URL地址
 const API_URL = 'http://localhost:8000/api'
 
+/**
+ * 主应用程序组件
+ * 负责管理应用的整体状态和路由切换
+ * @returns {JSX.Element} 应用程序主界面
+ */
 function App() {
   const [activeTab, setActiveTab] = useState('generate')
   const [status, setStatus] = useState({})
@@ -20,6 +26,13 @@ function App() {
     return () => clearInterval(interval)
   }, [])
 
+  /**
+   * 异步获取服务器状态信息
+   * 定期向API发送请求以更新服务器运行状态
+   * @async
+   * @function fetchStatus
+   * @returns {void}
+   */
   const fetchStatus = async () => {
     try {
       const res = await axios.get(`${API_URL}/status`)

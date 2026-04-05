@@ -15,15 +15,28 @@ class ModelManager:
     """模型管理器"""
     
     def __init__(self):
+        """初始化模型管理器"""
         self.model = None
         self.tokenizer = None
         self.config = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     def is_loaded(self) -> bool:
+        """
+        检查模型是否已加载
+        
+        Returns:
+            bool: 模型是否已加载
+        """
         return self.model is not None
     
     def get_info(self) -> Dict[str, Any]:
+        """
+        获取模型信息
+        
+        Returns:
+            Dict[str, Any]: 包含模型详细信息的字典
+        """
         if not self.model:
             return {"loaded": False}
         
@@ -40,7 +53,15 @@ class ModelManager:
         }
     
     def load_model(self, model_path: str) -> bool:
-        """加载模型"""
+        """
+        加载模型
+        
+        Args:
+            model_path (str): 模型文件路径
+            
+        Returns:
+            bool: 加载是否成功
+        """
         try:
             from src.model import ShannonB1, ModelConfig
             from src.data import CharTokenizer, BPETokenizer
@@ -93,7 +114,20 @@ class ModelManager:
     
     def generate(self, prompt: str, max_tokens: int = 100, temperature: float = 0.8,
                  top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15) -> Dict[str, Any]:
-        """生成文本"""
+        """
+        生成文本
+        
+        Args:
+            prompt (str): 提示文本
+            max_tokens (int): 最大生成token数，默认100
+            temperature (float): 温度参数，默认0.8
+            top_k (int): Top-k采样参数，默认40
+            top_p (float): Top-p采样参数，默认0.9
+            repetition_penalty (float): 重复惩罚参数，默认1.15
+            
+        Returns:
+            Dict[str, Any]: 包含生成结果的字典
+        """
         if not self.model:
             raise ValueError("No model loaded")
         

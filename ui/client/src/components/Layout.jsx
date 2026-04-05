@@ -1,6 +1,16 @@
 import React from 'react'
 
+/**
+ * 布局组件，提供应用的整体结构，包括导航栏、标签页和主内容区域
+ * @param {React.ReactNode} children - 主要内容组件
+ * @param {string} activeTab - 当前激活的标签页ID
+ * @param {Function} setActiveTab - 设置当前激活标签页的回调函数
+ * @param {string} apiUrl - API服务地址
+ * @param {Object} status - API状态信息对象
+ * @returns {JSX.Element} 布局组件的JSX元素
+ */
 const Layout = ({ children, activeTab, setActiveTab, apiUrl, status }) => {
+  // 定义导航标签页配置数组
   const tabs = [
     { id: 'generate', name: '文本生成', icon: '✍️' },
     { id: 'training', name: '训练监控', icon: '📈' },

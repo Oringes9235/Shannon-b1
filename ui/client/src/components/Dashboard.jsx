@@ -2,7 +2,17 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { LineChart, Line, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
+/**
+ * Dashboard组件 - 显示系统状态和监控数据
+ * @param {string} apiUrl - API服务的基础URL地址
+ * @param {Object} status - 包含系统状态信息的对象，包括模型加载状态、训练状态等
+ * @returns {JSX.Element} 渲染的仪表板界面组件
+ */
 const Dashboard = ({ apiUrl, status }) => {
+  /**
+   * 系统统计信息状态
+   * @type {Object} 包含CPU、内存、GPU内存和磁盘使用率百分比
+   */
   const [systemStats, setSystemStats] = useState({
     cpu_percent: 0,
     memory_percent: 0,
@@ -10,11 +20,18 @@ const Dashboard = ({ apiUrl, status }) => {
     disk_usage: 0
   })
 
+  /**
+   * 设置定时器每2秒获取一次系统统计数据
+   */
   useEffect(() => {
     const interval = setInterval(fetchSystemStats, 2000)
     return () => clearInterval(interval)
   }, [])
 
+  /**
+   * 异步获取系统统计信息
+   * 尝试从API获取实时数据，失败时使用随机模拟数据
+   */
   const fetchSystemStats = async () => {
     try {
       // 获取系统信息（需要后端支持）
@@ -31,6 +48,10 @@ const Dashboard = ({ apiUrl, status }) => {
     }
   }
 
+  /**
+   * 图表数据格式化：将系统统计信息转换为饼图可用的数据结构
+   * @type {Array} 包含名称、数值和颜色的图表数据数组
+   */
   const chartData = [
     { name: 'CPU', value: systemStats.cpu_percent, color: '#3b82f6' },
     { name: '内存', value: systemStats.memory_percent, color: '#10b981' },
@@ -40,7 +61,7 @@ const Dashboard = ({ apiUrl, status }) => {
 
   return (
     <div className="space-y-6">
-      {/* 状态卡片 */}
+      {/* 状态卡片区域 - 显示模型、训练、API和设备状态 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
           <div className="flex items-center justify-between">
@@ -84,7 +105,7 @@ const Dashboard = ({ apiUrl, status }) => {
         </div>
       </div>
 
-      {/* 系统资源 */}
+      {/* 系统资源使用情况可视化区域 */}
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
         <h2 className="text-xl font-semibold mb-4">📊 系统资源</h2>
         <div className="grid grid-cols-2 gap-6">
@@ -105,7 +126,7 @@ const Dashboard = ({ apiUrl, status }) => {
         </div>
       </div>
 
-      {/* 模型信息 */}
+      {/* 模型详细信息展示区域 - 仅在模型已加载时显示 */}
       {status.model_loaded && (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h2 className="text-xl font-semibold mb-4">🤖 模型详情</h2>
@@ -130,7 +151,7 @@ const Dashboard = ({ apiUrl, status }) => {
         </div>
       )}
 
-      {/* 时间戳 */}
+      {/* 时间戳显示最后更新时间 */}
       <div className="text-center text-gray-500 text-xs">
         最后更新: {status.timestamp ? new Date(status.timestamp).toLocaleString() : '-'}
       </div>

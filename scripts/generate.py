@@ -15,14 +15,25 @@ from src.data import CharTokenizer, BPETokenizer
 
 
 def load_model(model_path: str, device: str = 'cpu'):
-    """加载模型"""
+    """
+    加载模型、分词器和配置
+    
+    Args:
+        model_path (str): 模型文件路径
+        device (str): 运行设备，默认为'cpu'
+    
+    Returns:
+        tuple: 包含模型、分词器和配置的元组 (model, tokenizer, config)
+    """
     checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     
+    # 尝试从检查点中获取配置信息
     if 'config' in checkpoint:
         config = checkpoint['config']
     elif 'model_config' in checkpoint:
         config = checkpoint['model_config']
     else:
+        # 如果检查点中没有配置信息，则从状态字典中推断配置
         state_dict = checkpoint['model_state_dict']
         vocab_size = state_dict['token_embedding.weight'].shape[0]
         d_model = state_dict['token_embedding.weight'].shape[1]
@@ -33,6 +44,7 @@ def load_model(model_path: str, device: str = 'cpu'):
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     
+    # 尝试加载对应的分词器文件
     tokenizer_path = model_path.replace('.pt', '_tokenizer.json')
     if os.path.exists(tokenizer_path):
         import json
@@ -45,6 +57,7 @@ def load_model(model_path: str, device: str = 'cpu'):
             tokenizer = BPETokenizer()
             tokenizer.load(tokenizer_path)
     else:
+        # 如果没有找到分词器文件，创建一个基础分词器
         tokenizer = CharTokenizer()
         tokenizer.build_vocab(["sample text"], 1000)
     
@@ -52,6 +65,7 @@ def load_model(model_path: str, device: str = 'cpu'):
 
 
 def main():
+    # 解析命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument('--model-path', type=str, required=True)
     parser.add_argument('--prompt', type=str, default="The ")
@@ -78,6 +92,7 @@ def main():
     start_tokens = tokenizer.encode(args.prompt)[:50]
     print(f"Start tokens: {start_tokens[:10]}...")
     
+    # 使用模型生成文本
     with torch.no_grad():
         generated = model.generate(
             start_tokens,

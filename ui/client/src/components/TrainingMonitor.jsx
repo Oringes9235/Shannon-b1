@@ -3,7 +3,15 @@ import axios from 'axios'
 import { subscribe } from '../ws'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts'
 
+/**
+ * 训练监控组件 - 用于监控和控制机器学习模型的训练过程
+ * 提供训练配置、实时进度监控、损失曲线可视化和训练日志功能
+ * @param {Object} props - 组件属性
+ * @param {string} props.apiUrl - API服务端点地址
+ * @returns {JSX.Element} 训练监控界面组件
+ */
 const TrainingMonitor = ({ apiUrl }) => {
+  // 初始化训练配置状态，包含模型架构和训练超参数
   const [trainingConfig, setTrainingConfig] = useState({
     tokenizer: 'char',
     vocab_size: 200,
@@ -16,24 +24,42 @@ const TrainingMonitor = ({ apiUrl }) => {
     dropout: 0.3,
     weight_decay: 0.1
   })
+
+  // 训练状态：运行状态和进度信息
   const [trainingStatus, setTrainingStatus] = useState({ is_running: false, progress: 0 })
+
+  // 损失历史记录，用于绘制损失曲线
   const [lossHistory, setLossHistory] = useState([])
+
+  // 训练日志记录
   const [logs, setLogs] = useState([])
+
+  // WebSocket连接管理
   const [ws, setWs] = useState(null)
+
+  // 加载状态，用于控制按钮状态
   const [loading, setLoading] = useState(false)
 
+  // 设置WebSocket订阅，用于接收实时训练消息
   useEffect(() => {
     // 使用共享 WebSocket，避免组件卸载时关闭连接导致训练监控中断
     const unsub = subscribe((data) => handleWebSocketMessage(data), apiUrl)
     return () => unsub()
   }, [])
 
+  // 设置定时器，定期获取训练状态更新
   useEffect(() => {
     // 定时获取训练状态
     const interval = setInterval(fetchTrainingStatus, 2000)
     return () => clearInterval(interval)
   }, [])
 
+  /**
+   * 处理WebSocket接收到的消息，根据消息类型更新相应状态
+   * @param {Object} data - WebSocket消息数据
+   * @param {string} data.type - 消息类型（training_progress, training_epoch_complete等）
+   * @param {Object} data.data - 消息携带的具体数据
+   */
   const handleWebSocketMessage = (data) => {
     if (data.type === 'training_progress') {
       setTrainingStatus(data.data)
@@ -63,6 +89,10 @@ const TrainingMonitor = ({ apiUrl }) => {
     }
   }
 
+  /**
+   * 异步获取当前训练状态
+   * 从API端点获取最新的训练进度和状态信息
+   */
   const fetchTrainingStatus = async () => {
     try {
       const res = await axios.get(`${apiUrl}/train/status`)
@@ -72,6 +102,10 @@ const TrainingMonitor = ({ apiUrl }) => {
     }
   }
 
+  /**
+   * 启动训练过程
+   * 发送训练配置到后端开始训练，并初始化相关状态
+   */
   const startTraining = async () => {
     setLoading(true)
     setLossHistory([])
@@ -103,6 +137,10 @@ const TrainingMonitor = ({ apiUrl }) => {
     }
   }
 
+  /**
+   * 请求停止当前训练过程
+   * 向后端发送停止训练指令
+   */
   const stopTraining = async () => {
     try {
       await axios.post(`${apiUrl}/train/stop`)
@@ -117,7 +155,7 @@ const TrainingMonitor = ({ apiUrl }) => {
 
   return (
     <div className="space-y-6">
-      {/* 训练配置 */}
+      {/* 训练配置部分 - 包含各种训练参数的输入控件 */}
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
         <h2 className="text-xl font-semibold mb-4">📊 训练配置</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -207,6 +245,7 @@ const TrainingMonitor = ({ apiUrl }) => {
           </div>
         </div>
 
+        {/* 训练控制按钮 - 根据当前训练状态显示开始或停止按钮 */}
         <div className="flex gap-3 mt-6">
           {!trainingStatus.is_running ? (
             <button
@@ -227,7 +266,7 @@ const TrainingMonitor = ({ apiUrl }) => {
         </div>
       </div>
 
-      {/* 训练进度 */}
+      {/* 训练进度显示区域 - 当训练正在运行时显示进度条和当前状态 */}
       {trainingStatus.is_running && (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h2 className="text-xl font-semibold mb-4">📈 训练进度</h2>
@@ -256,7 +295,7 @@ const TrainingMonitor = ({ apiUrl }) => {
         </div>
       )}
 
-      {/* 损失曲线 */}
+      {/* 损失曲线图表 - 当有损失历史数据时显示训练和验证损失曲线 */}
       {lossHistory.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h2 className="text-xl font-semibold mb-4">📉 损失曲线</h2>
@@ -276,7 +315,7 @@ const TrainingMonitor = ({ apiUrl }) => {
         </div>
       )}
 
-      {/* 训练日志 */}
+      {/* 训练日志显示区域 - 显示训练过程中的各类消息和事件 */}
       {logs.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h2 className="text-xl font-semibold mb-4">📋 训练日志</h2>

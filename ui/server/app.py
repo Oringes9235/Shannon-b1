@@ -26,6 +26,10 @@ from training_worker import TrainingWorker
 
 # 请求/响应模型
 class GenerateRequest(BaseModel):
+    """
+    文本生成请求数据模型
+    定义了文本生成所需的各种参数配置
+    """
     prompt: str
     max_tokens: int = 100
     temperature: float = 0.8
@@ -35,6 +39,10 @@ class GenerateRequest(BaseModel):
 
 
 class TrainRequest(BaseModel):
+    """
+    模型训练请求数据模型
+    定义了模型训练所需的超参数配置
+    """
     tokenizer: str = "char"
     vocab_size: int = 200
     d_model: int = 128
@@ -56,7 +64,13 @@ main_event_loop = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
+    """
+    应用生命周期管理器
+    在应用启动时初始化事件循环，在关闭时停止训练工作进程
+    
+    Args:
+        app: FastAPI应用实例
+    """
     print("Starting Shannon-b1 Web Server...")
     global main_event_loop
     try:
@@ -83,18 +97,42 @@ app.add_middleware(
 
 # WebSocket 连接管理
 class ConnectionManager:
+    """
+    WebSocket连接管理器
+    负责管理所有活跃的WebSocket连接，并支持消息广播功能
+    """
+
     def __init__(self):
+        """初始化连接管理器"""
         self.active_connections: list[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
+        """
+        建立新的WebSocket连接
+        
+        Args:
+            websocket: WebSocket连接对象
+        """
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
+        """
+        断开指定的WebSocket连接
+        
+        Args:
+            websocket: WebSocket连接对象
+        """
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict):
+        """
+        向所有活跃连接广播消息
+        
+        Args:
+            message: 要广播的消息字典
+        """
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
@@ -106,7 +144,13 @@ manager = ConnectionManager()
 
 
 def broadcast_training_update(data: dict):
-    """广播训练更新"""
+    """
+    广播训练更新消息到所有WebSocket连接
+    支持跨线程安全调用，自动处理事件循环调度
+    
+    Args:
+        data: 包含训练状态更新的数据字典
+    """
     # run-safe broadcast: if called from background thread, schedule on main event loop
     try:
         loop = asyncio.get_running_loop()
@@ -130,7 +174,13 @@ def broadcast_training_update(data: dict):
 # API 路由
 @app.get("/api/status")
 async def get_status():
-    """获取服务器状态"""
+    """
+    获取服务器整体状态信息
+    返回模型加载状态、训练状态等系统信息
+    
+    Returns:
+        dict: 包含服务器状态信息的字典
+    """
     return {
         "status": "running",
         "model_loaded": model_manager.is_loaded(),
@@ -142,13 +192,29 @@ async def get_status():
 
 @app.get("/api/model/info")
 async def get_model_info():
-    """获取模型信息"""
+    """
+    获取当前加载模型的详细信息
+    
+    Returns:
+        dict: 模型信息字典
+    """
     return model_manager.get_info()
 
 
 @app.post("/api/model/load")
 async def load_model(model_path: str = "../../checkpoints/shannon_b1.pt"):
-    """加载模型"""
+    """
+    加载指定路径的模型文件
+    
+    Args:
+        model_path: 模型文件路径，默认为"../../checkpoints/shannon_b1.pt"
+        
+    Returns:
+        dict: 加载结果信息
+        
+    Raises:
+        HTTPException: 当模型文件不存在或加载失败时抛出异常
+    """
     try:
         success = model_manager.load_model(model_path)
         if success:
@@ -161,7 +227,18 @@ async def load_model(model_path: str = "../../checkpoints/shannon_b1.pt"):
 
 @app.post("/api/generate")
 async def generate(request: GenerateRequest):
-    """生成文本"""
+    """
+    根据给定提示生成文本内容
+    
+    Args:
+        request: 包含生成参数的GenerateRequest对象
+        
+    Returns:
+        dict: 生成结果信息
+        
+    Raises:
+        HTTPException: 当没有加载模型或生成过程出现错误时抛出异常
+    """
     if not model_manager.is_loaded():
         raise HTTPException(status_code=400, detail="No model loaded. Please load a model first.")
     
@@ -181,7 +258,19 @@ async def generate(request: GenerateRequest):
 
 @app.post("/api/train/start")
 async def start_training(request: TrainRequest, background_tasks: BackgroundTasks):
-    """开始训练"""
+    """
+    开始模型训练任务
+    
+    Args:
+        request: 包含训练配置参数的TrainRequest对象
+        background_tasks: FastAPI后台任务管理器
+        
+    Returns:
+        dict: 训练启动结果信息
+        
+    Raises:
+        HTTPException: 当已有训练任务在进行中时抛出异常
+    """
     global training_worker
     
     if training_worker and training_worker.is_running:
@@ -199,7 +288,12 @@ async def start_training(request: TrainRequest, background_tasks: BackgroundTask
 
 @app.post("/api/train/stop")
 async def stop_training():
-    """停止训练"""
+    """
+    停止正在进行的训练任务
+    
+    Returns:
+        dict: 停止操作的结果信息
+    """
     global training_worker
     
     if training_worker:
@@ -210,7 +304,12 @@ async def stop_training():
 
 @app.get("/api/train/status")
 async def get_training_status():
-    """获取训练状态"""
+    """
+    获取当前训练任务的状态信息
+    
+    Returns:
+        dict: 训练状态信息，包括是否运行、进度和损失值等
+    """
     if training_worker:
         return training_worker.get_status()
     return {"is_running": False, "progress": 0, "current_loss": None}
@@ -218,7 +317,12 @@ async def get_training_status():
 
 @app.get("/api/checkpoints")
 async def list_checkpoints():
-    """列出所有检查点"""
+    """
+    列出所有可用的模型检查点文件
+    
+    Returns:
+        list: 按修改时间排序的检查点信息列表
+    """
     import glob
     checkpoints = []
     for path in glob.glob("checkpoints/*.pt"):
@@ -236,7 +340,13 @@ async def list_checkpoints():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket 连接用于实时监控"""
+    """
+    WebSocket端点用于实时监控和通信
+    处理客户端连接并维持长连接以接收实时更新
+    
+    Args:
+        websocket: WebSocket连接对象
+    """
     await manager.connect(websocket)
     try:
         while True:
@@ -250,6 +360,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/")
 async def root():
+    """
+    根路径API端点
+    返回API服务基本信息
+    
+    Returns:
+        dict: 服务信息字典
+    """
     return {"message": "Shannon-b1 API Server", "docs": "/docs"}
 
 

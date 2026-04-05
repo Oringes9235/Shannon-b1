@@ -19,7 +19,18 @@ from src.training.metrics import compute_perplexity, compute_accuracy, compute_t
 
 
 def evaluate(model, dataloader, criterion, device='cpu'):
-    """评估模型"""
+    """
+    评估模型性能
+    
+    Args:
+        model: 待评估的模型
+        dataloader: 数据加载器
+        criterion: 损失函数
+        device: 计算设备，默认为'cpu'
+    
+    Returns:
+        dict: 包含损失、准确率、top-5准确率和困惑度的字典
+    """
     model.eval()
     total_loss = 0
     total_acc = 0
@@ -56,7 +67,16 @@ def evaluate(model, dataloader, criterion, device='cpu'):
 
 
 def load_model(model_path: str, device: str = 'cpu'):
-    """加载模型"""
+    """
+    从检查点文件加载模型
+    
+    Args:
+        model_path: 模型检查点文件路径
+        device: 计算设备，默认为'cpu'
+    
+    Returns:
+        tuple: (model, tokenizer, config) 模型、分词器和配置对象
+    """
     checkpoint = torch.load(model_path, map_location=device)
     
     # 获取模型配置

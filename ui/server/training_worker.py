@@ -13,9 +13,28 @@ from typing import Dict, Any, Optional, Callable
 
 
 class TrainingWorker:
-    """后台训练工作进程：通过子进程运行项目的 `scripts/train.py` 并转发输出到回调（通常是 WebSocket）。"""
+    """后台训练工作进程：通过子进程运行项目的 `scripts/train.py` 并转发输出到回调（通常是 WebSocket）。
+    
+    Args:
+        config (Dict[str, Any]): 训练配置参数字典
+        callback (Optional[Callable]): 可选的状态更新回调函数
+    
+    Attributes:
+        config: 训练配置参数
+        callback: 状态更新回调函数
+        is_running: 训练是否正在运行
+        proc: 子进程对象
+        thread: 监听线程对象
+        status: 训练状态信息字典
+    """
 
     def __init__(self, config: Dict[str, Any], callback: Optional[Callable] = None):
+        """初始化训练工作进程
+        
+        Args:
+            config (Dict[str, Any]): 训练配置参数字典
+            callback (Optional[Callable]): 可选的状态更新回调函数
+        """
         self.config = config
         self.callback = callback
         self.is_running = False
@@ -40,6 +59,15 @@ class TrainingWorker:
         self.thread.start()
 
     def _run_subprocess(self):
+        """内部方法：执行子进程训练并处理输出流
+        
+        该方法负责：
+        1. 构建训练脚本路径和命令参数
+        2. 启动子进程运行训练脚本
+        3. 实时读取并转发训练输出
+        4. 解析训练进度信息
+        5. 处理训练完成或错误情况
+        """
         self.is_running = True
         self.status["is_running"] = True
         self.status["start_time"] = datetime.now().isoformat()
@@ -157,11 +185,20 @@ class TrainingWorker:
         self._send_update("training_stopped", {"message": "Stopped by user"})
 
     def get_status(self) -> Dict[str, Any]:
-        """获取训练状态"""
+        """获取当前训练状态信息
+        
+        Returns:
+            Dict[str, Any]: 包含当前训练状态的字典
+        """
         return self.status
 
     def _send_update(self, event: str, data: Dict[str, Any]):
-        """通过回调转发事件（含时间戳）。"""
+        """通过回调转发事件（含时间戳）。
+        
+        Args:
+            event (str): 事件类型字符串
+            data (Dict[str, Any]): 要发送的数据字典
+        """
         payload = {
             "type": event,
             "data": data,

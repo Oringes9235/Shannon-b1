@@ -12,6 +12,14 @@ class CharTokenizer:
     """字符级分词器"""
     
     def __init__(self):
+        """
+        初始化字符级分词器
+        
+        Attributes:
+            char_to_idx: 字符到索引的映射字典
+            idx_to_char: 索引到字符的映射字典  
+            special_tokens: 特殊标记字典，包括填充、未知、开始、结束标记
+        """
         self.char_to_idx = {}
         self.idx_to_char = {}
         self.special_tokens = {
@@ -22,6 +30,16 @@ class CharTokenizer:
         }
     
     def build_vocab(self, texts: List[str], vocab_size: int = 1000):
+        """
+        构建词汇表
+        
+        Args:
+            texts: 训练文本列表
+            vocab_size: 目标词汇表大小，默认1000
+            
+        Returns:
+            返回当前分词器实例用于链式调用
+        """
         chars = set()
         for text in texts:
             chars.update(text)
@@ -38,6 +56,17 @@ class CharTokenizer:
         return self
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
+        """
+        将文本编码为token序列
+        
+        Args:
+            text: 输入文本字符串
+            add_bos: 是否在开头添加<BOS>标记
+            add_eos: 是否在末尾添加<EOS>标记
+            
+        Returns:
+            编码后的token索引列表
+        """
         tokens = []
         for ch in text:
             if ch in self.char_to_idx:
@@ -53,6 +82,16 @@ class CharTokenizer:
         return tokens
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
+        """
+        将token序列解码为文本
+        
+        Args:
+            tokens: token索引列表
+            skip_special: 是否跳过特殊标记
+            
+        Returns:
+            解码后的文本字符串
+        """
         chars = []
         for t in tokens:
             ch = self.idx_to_char.get(t, '<UNK>')
@@ -62,12 +101,30 @@ class CharTokenizer:
         return ''.join(chars)
     
     def get_vocab_size(self) -> int:
+        """
+        获取词汇表大小
+        
+        Returns:
+            词汇表中token的数量
+        """
         return len(self.char_to_idx)
     
     def get_pad_id(self) -> int:
+        """
+        获取填充标记的ID
+        
+        Returns:
+            <PAD>标记对应的索引
+        """
         return self.char_to_idx['<PAD>']
     
     def save(self, path: str):
+        """
+        保存分词器到文件
+        
+        Args:
+            path: 保存路径
+        """
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
                 'char_to_idx': self.char_to_idx,
@@ -75,6 +132,12 @@ class CharTokenizer:
             }, f, ensure_ascii=False, indent=2)
     
     def load(self, path: str):
+        """
+        从文件加载分词器
+        
+        Args:
+            path: 加载路径
+        """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
@@ -94,6 +157,21 @@ class BPETokenizer:
     """BPE分词器"""
     
     def __init__(self, vocab_size: int = 5000):
+        """
+        初始化BPE分词器
+        
+        Args:
+            vocab_size: 目标词汇表大小，默认5000
+            
+        Attributes:
+            vocab_size: 目标词汇表大小
+            merges: BPE合并规则字典
+            vocab: 词汇表字典
+            idx_to_token: 索引到token的映射
+            special_tokens: 特殊标记字典
+            next_id: 下一个可用ID
+            pat: 正则表达式模式用于预处理文本
+        """
         self.vocab_size = vocab_size
         self.merges: Dict[Tuple[str, str], int] = {}
         self.vocab: Dict[str, int] = {}
@@ -109,9 +187,18 @@ class BPETokenizer:
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+| ?[^\s\w]|\s+(?!\S)|\s+""", re.UNICODE)
     
     def train(self, texts: List[str], min_frequency: int = 2, verbose: bool = True):
+        """
+        训练BPE分词器
+        
+        Args:
+            texts: 训练文本列表
+            min_frequency: 最小频率阈值，默认2
+            verbose: 是否打印训练进度，默认True
+        """
         if verbose:
             print(f"Training BPE tokenizer (target: {self.vocab_size})")
         
+        # 统计词频并进行预处理
         word_counts = defaultdict(int)
         for text in texts:
             words = self.pat.findall(text)
@@ -119,12 +206,14 @@ class BPETokenizer:
                 word_with_end = ' '.join(list(word)) + ' </w>'
                 word_counts[word_with_end] += 1
         
+        # 收集所有字符
         chars = set()
         for word in word_counts.keys():
             for ch in word.split():
                 if ch != '</w>':
                     chars.add(ch)
         
+        # 初始化基础词汇表
         for ch in sorted(chars):
             if ch not in self.vocab and ch not in self.special_tokens:
                 self.vocab[ch] = self.next_id
@@ -132,6 +221,7 @@ class BPETokenizer:
         
         num_merges = min(self.vocab_size - len(self.vocab) - len(self.special_tokens), 2000)
         
+        # 执行BPE合并过程
         for i in range(num_merges):
             pairs = defaultdict(int)
             for word, count in word_counts.items():
@@ -168,6 +258,17 @@ class BPETokenizer:
             print(f"✅ BPE: {len(self.vocab)} tokens, {len(self.merges)} merges")
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
+        """
+        将文本编码为token序列
+        
+        Args:
+            text: 输入文本字符串
+            add_bos: 是否在开头添加<BOS>标记
+            add_eos: 是否在末尾添加<EOS>标记
+            
+        Returns:
+            编码后的token索引列表
+        """
         if not text:
             tokens = []
         else:
@@ -185,8 +286,18 @@ class BPETokenizer:
         return tokens
     
     def _encode_word(self, word: str) -> List[int]:
+        """
+        对单个词进行编码
+        
+        Args:
+            word: 输入单词字符串
+            
+        Returns:
+            编码后的token索引列表
+        """
         symbols = list(word) + ['</w>']
         
+        # 执行反向合并过程
         while len(symbols) > 1:
             min_pair = None
             min_idx = float('inf')
@@ -219,6 +330,16 @@ class BPETokenizer:
         return tokens
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
+        """
+        将token序列解码为文本
+        
+        Args:
+            tokens: token索引列表
+            skip_special: 是否跳过特殊标记
+            
+        Returns:
+            解码后的文本字符串
+        """
         chars: List[str] = []
         for t in tokens:
             if t in self.idx_to_token:
@@ -245,12 +366,30 @@ class BPETokenizer:
         return text
     
     def get_vocab_size(self) -> int:
+        """
+        获取词汇表大小
+        
+        Returns:
+            包括特殊标记在内的总词汇表大小
+        """
         return len(self.vocab) + len(self.special_tokens)
     
     def get_pad_id(self) -> int:
+        """
+        获取填充标记的ID
+        
+        Returns:
+            <PAD>标记对应的索引
+        """
         return self.special_tokens['<PAD>']
     
     def save(self, path: str):
+        """
+        保存分词器到文件
+        
+        Args:
+            path: 保存路径
+        """
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
                 'vocab': self.vocab,
@@ -260,6 +399,12 @@ class BPETokenizer:
             }, f, ensure_ascii=False, indent=2)
     
     def load(self, path: str):
+        """
+        从文件加载分词器
+        
+        Args:
+            path: 加载路径
+        """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -283,6 +428,18 @@ class SimpleBPETokenizer:
     """简化BPE分词器"""
     
     def __init__(self, vocab_size: int = 1000):
+        """
+        初始化简化BPE分词器
+        
+        Args:
+            vocab_size: 目标词汇表大小，默认1000
+            
+        Attributes:
+            vocab_size: 目标词汇表大小
+            char_to_idx: 字符到索引的映射
+            idx_to_char: 索引到字符的映射
+            special_tokens: 特殊标记字典
+        """
         self.vocab_size = vocab_size
         self.char_to_idx = {}
         self.idx_to_char = {}
@@ -294,6 +451,12 @@ class SimpleBPETokenizer:
         }
     
     def build_vocab(self, texts: List[str]):
+        """
+        构建词汇表
+        
+        Args:
+            texts: 训练文本列表
+        """
         chars = set()
         for text in texts:
             chars.update(text)
@@ -310,6 +473,17 @@ class SimpleBPETokenizer:
         return self
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
+        """
+        将文本编码为token序列
+        
+        Args:
+            text: 输入文本字符串
+            add_bos: 是否在开头添加<BOS>标记
+            add_eos: 是否在末尾添加<EOS>标记
+            
+        Returns:
+            编码后的token索引列表
+        """
         tokens = []
         for ch in text:
             if ch in self.char_to_idx:
@@ -325,6 +499,16 @@ class SimpleBPETokenizer:
         return tokens
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
+        """
+        将token序列解码为文本
+        
+        Args:
+            tokens: token索引列表
+            skip_special: 是否跳过特殊标记
+            
+        Returns:
+            解码后的文本字符串
+        """
         chars = []
         for t in tokens:
             ch = self.idx_to_char.get(t, '<UNK>')
@@ -334,12 +518,30 @@ class SimpleBPETokenizer:
         return ''.join(chars)
     
     def get_vocab_size(self) -> int:
+        """
+        获取词汇表大小
+        
+        Returns:
+            词汇表中token的数量
+        """
         return len(self.char_to_idx)
     
     def get_pad_id(self) -> int:
+        """
+        获取填充标记的ID
+        
+        Returns:
+            <PAD>标记对应的索引
+        """
         return self.char_to_idx['<PAD>']
     
     def save(self, path: str):
+        """
+        保存分词器到文件
+        
+        Args:
+            path: 保存路径
+        """
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
                 'char_to_idx': self.char_to_idx,
@@ -347,6 +549,12 @@ class SimpleBPETokenizer:
             }, f, ensure_ascii=False, indent=2)
     
     def load(self, path: str):
+        """
+        从文件加载分词器
+        
+        Args:
+            path: 加载路径
+        """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']

@@ -26,6 +26,12 @@ class ShannonB1(nn.Module):
     """
     
     def __init__(self, config: ModelConfig):
+        """
+        初始化 ShannonB1 模型
+        
+        Args:
+            config: 模型配置对象，包含词汇表大小、模型维度等参数
+        """
         super().__init__()
 
         self.config = config
@@ -143,6 +149,13 @@ class ShannonB1(nn.Module):
             temperature: 温度系数 (越高越随机)
             top_k: Top-K 采样
             top_p: Top-P (nucleus) 采样
+            repetition_penalty: 重复惩罚系数
+            presence_penalty: 存在惩罚系数
+            frequency_penalty: 频率惩罚系数
+            ban_immediate_repeat: 是否禁止立即重复
+            ngram_block_size: N-gram 阻断大小
+            best_of: 生成多少个样本后选择最优
+            max_repetition: 最大重复次数限制
         
         Returns:
             生成的 token 序列
@@ -293,7 +306,12 @@ class ShannonB1Encoder(nn.Module):
     """编码器版本 (非自回归，用于理解任务)"""
     
     def __init__(self, config: ModelConfig):
+        """
+        初始化 ShannonB1Encoder 模型
         
+        Args:
+            config: 模型配置对象，包含词汇表大小、模型维度等参数
+        """
         super().__init__()
 
         self.config = config
@@ -317,11 +335,21 @@ class ShannonB1Encoder(nn.Module):
         self._init_weights()
     
     def _init_weights(self):
+        """初始化模型权重"""
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
     
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        """
+        前向传播
+        
+        Args:
+            tokens: (batch, seq_len) 输入 token IDs
+        
+        Returns:
+            输出 logits: (batch, seq_len, vocab_size)
+        """
         x = self.token_embedding(tokens) * math.sqrt(self.config.d_model)
         x = self.pos_encoding(x)
         x = self.transformer(x)

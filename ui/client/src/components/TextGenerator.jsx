@@ -1,16 +1,28 @@
 import React, { useState } from 'react'
 import axios from 'axios'
 
+/**
+ * 文本生成组件 - 提供AI文本生成功能界面和交互逻辑
+ * @param {Object} props - 组件属性对象
+ * @param {string} props.apiUrl - API服务端点地址
+ * @param {Object} props.status - 应用状态对象，包含模型加载状态信息
+ * @returns {JSX.Element} 文本生成界面组件
+ */
 const TextGenerator = ({ apiUrl, status }) => {
-  const [prompt, setPrompt] = useState('The ')
-  const [maxTokens, setMaxTokens] = useState(100)
-  const [temperature, setTemperature] = useState(0.85)
-  const [topK, setTopK] = useState(40)
-  const [repetitionPenalty, setRepetitionPenalty] = useState(1.15)
-  const [generated, setGenerated] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  // 初始化文本生成相关状态变量
+  const [prompt, setPrompt] = useState('The ') // 提示词输入
+  const [maxTokens, setMaxTokens] = useState(100) // 最大token数
+  const [temperature, setTemperature] = useState(0.85) // 温度参数，控制随机性
+  const [topK, setTopK] = useState(40) // Top-K采样参数
+  const [repetitionPenalty, setRepetitionPenalty] = useState(1.15) // 重复惩罚系数
+  const [generated, setGenerated] = useState('') // 生成的文本结果
+  const [loading, setLoading] = useState(false) // 加载状态
+  const [error, setError] = useState('') // 错误信息
 
+  /**
+   * 处理文本生成请求的异步函数
+   * 向后端API发送生成请求并处理响应
+   */
   const handleGenerate = async () => {
     if (!status.model_loaded) {
       setError('请先加载模型')
