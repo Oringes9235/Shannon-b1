@@ -24,11 +24,23 @@ def download_shakespeare(save_path: str = 'data/shakespeare.txt') -> str:
 
 
 def load_shakespeare() -> str:
-    """加载莎士比亚文本"""
+    """加载莎士比亚文本
+
+    优先使用本地文件 data/shakespeare.txt（如果存在），否则尝试下载；
+    下载失败时使用内置的备用文本。
+    """
+    local_path = 'data/shakespeare.txt'
+    if os.path.exists(local_path):
+        with open(local_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        print(f"✅ Loaded local Shakespeare: {len(text):,} chars from {local_path}")
+        return text
+
     path = download_shakespeare()
     if path:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
+    print("⚠️ Using fallback sample text (download failed and no local file found).")
     return "To be or not to be, that is the question. " * 1000
 
 

@@ -5,13 +5,14 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.cuda.amp import GradScaler, autocast
+from torch import amp
 from tqdm import tqdm
 import os
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 import numpy as np
+import torch.nn.functional as F
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -47,16 +48,24 @@ class ImprovedTrainer:
         # 学习率调度器
         self.scheduler = scheduler
         
-        # 损失函数
-        self.criterion = nn.CrossEntropyLoss()
+        # 损失函数（若使用 label smoothing，将使用自定义计算）
+        self.criterion = None
         
         # 混合精度训练
         self.use_amp = config.use_amp and self.device == 'cuda'
-        self.scaler = GradScaler() if self.use_amp else None
-        
+        # GradScaler 初始化兼容不同 PyTorch 版本
+        if self.use_amp:
+            try:
+                self.scaler = amp.GradScaler(device_type='cuda')
+            except TypeError:
+                # 较旧/不同版本可能不接受 device_type 参数
+                self.scaler = amp.GradScaler()
+        else:
+            self.scaler = None
+
         # 梯度累积
         self.grad_accum_steps = config.gradient_accumulation_steps
-        
+
         # 历史记录
         self.history = {
             'train_loss': [], 
@@ -68,15 +77,30 @@ class ImprovedTrainer:
         self.best_val_loss = float('inf')
         self.best_epoch = 0
         self.patience_counter = 0
-        
+
         # TensorBoard
         self.writer = None
         if TENSORBOARD_AVAILABLE and hasattr(config, 'tensorboard_dir'):
             self.writer = SummaryWriter(config.tensorboard_dir)
-        
+
         # 统计信息
         self.global_step = 0
         self.start_time = None
+
+    def _autocast(self):
+        """Return a compatible autocast context manager across PyTorch versions."""
+        if not self.use_amp:
+            # no autocast when not using amp
+            from contextlib import nullcontext
+            return nullcontext()
+
+        try:
+            # try no-arg autocast (newer versions)
+            return amp.autocast()
+        except TypeError:
+            # fall back to specifying device_type
+            device_type = 'cuda' if self.device == 'cuda' else 'cpu'
+            return amp.autocast(device_type=device_type)
     
     def train_epoch(self) -> float:
         """训练一个epoch (支持混合精度和梯度累积)"""
@@ -92,18 +116,18 @@ class ImprovedTrainer:
             inputs = inputs.to(self.device)
             targets = targets.to(self.device)
             
-            # 混合精度前向传播
+            # 前向传播并计算损失（支持 label smoothing）
             if self.use_amp:
-                with autocast():
+                with self._autocast():
                     logits = self.model(inputs)
-                    loss = self.criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
+                    loss = self._compute_loss(logits, targets)
                     loss = loss / self.grad_accum_steps
-                
+
                 # 反向传播 (混合精度)
                 self.scaler.scale(loss).backward()
             else:
                 logits = self.model(inputs)
-                loss = self.criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
+                loss = self._compute_loss(logits, targets)
                 loss = loss / self.grad_accum_steps
                 loss.backward()
             
@@ -156,19 +180,38 @@ class ImprovedTrainer:
             inputs = inputs.to(self.device)
             targets = targets.to(self.device)
             
-            if self.use_amp:
-                with autocast():
-                    logits = self.model(inputs)
-                    loss = self.criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
-            else:
-                logits = self.model(inputs)
-                loss = self.criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
+            logits = self.model(inputs)
+            loss = self._compute_loss(logits, targets)
             
             total_loss += loss.item()
             num_batches += 1
             pbar.set_postfix({'val_loss': loss.item()})
         
         return total_loss / num_batches
+
+    def _compute_loss(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        计算损失，支持 label smoothing（基于交叉熵的平滑实现）。
+
+        logits: (batch, seq_len, vocab)
+        targets: (batch, seq_len)
+        返回: 标量 loss
+        """
+        smoothing = getattr(self.config, 'label_smoothing', 0.0)
+        vocab_size = logits.size(-1)
+
+        if smoothing is None or smoothing <= 0.0:
+            # 标准交叉熵
+            loss = F.cross_entropy(logits.view(-1, vocab_size), targets.view(-1), reduction='mean')
+            return loss
+
+        # label smoothing 实现（参考 HuggingFace/Transformer 常用实现）
+        log_probs = F.log_softmax(logits, dim=-1)  # (B, L, V)
+        nll_loss = -log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)  # (B, L)
+        smooth_loss = -log_probs.mean(dim=-1)  # (B, L)
+
+        loss = (1.0 - smoothing) * nll_loss + smoothing * smooth_loss
+        return loss.mean()
     
     def should_early_stop(self, val_loss: float) -> bool:
         """检查是否应该早停"""
@@ -279,15 +322,59 @@ class ImprovedTrainer:
     
     def load_checkpoint(self, path: str):
         """加载检查点"""
-        checkpoint = torch.load(path, map_location=self.device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        
-        if self.scheduler and checkpoint.get('scheduler_state_dict'):
-            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        
-        if self.scaler and checkpoint.get('scaler_state_dict'):
-            self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        # 尝试显式允许加载包含自定义类的完整检查点（非 weights-only）
+        try:
+            checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        except TypeError:
+            # 兼容较旧的 PyTorch 版本或不支持 weights_only 参数的环境
+            checkpoint = torch.load(path, map_location=self.device)
+        except Exception as e:
+            # 如果受限于 safe globals，提醒用户并重抛
+            print(f"⚠️ Failed to load checkpoint with weights_only=False: {e}")
+            raise
+        ckpt_state = checkpoint.get('model_state_dict', {})
+
+        # 尝试按形状安全地加载模型权重：仅替换形状匹配的参数
+        model_state = self.model.state_dict()
+        matched_keys = []
+        skipped_keys = []
+
+        for k, v in ckpt_state.items():
+            if k in model_state and v.size() == model_state[k].size():
+                model_state[k] = v
+                matched_keys.append(k)
+            else:
+                skipped_keys.append(k)
+
+        # 用更新后的 state_dict 加载（包含被跳过的原始参数）
+        self.model.load_state_dict(model_state)
+        print(f"✅ Loaded model weights: {len(matched_keys)} params matched, {len(skipped_keys)} skipped")
+
+        # 如果存在被跳过的参数（形状不匹配），不要加载 optimizer/scheduler/scaler 状态
+        if skipped_keys:
+            print("⚠️ Some parameters were skipped due to shape mismatch; skipping optimizer/scheduler/scaler state load to avoid errors.")
+        else:
+            # 尝试加载优化器和调度器状态，如果不兼容则跳过并提示
+            try:
+                if 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict'] is not None:
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                    print("✅ Optimizer state loaded")
+            except Exception as e:
+                print(f"⚠️ Could not load optimizer state (skipped): {e}")
+
+            try:
+                if self.scheduler and checkpoint.get('scheduler_state_dict'):
+                    self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                    print("✅ Scheduler state loaded")
+            except Exception as e:
+                print(f"⚠️ Could not load scheduler state (skipped): {e}")
+
+            try:
+                if self.scaler and checkpoint.get('scaler_state_dict'):
+                    self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
+                    print("✅ AMP scaler state loaded")
+            except Exception as e:
+                print(f"⚠️ Could not load scaler state (skipped): {e}")
         
         self.history = checkpoint.get('history', self.history)
         self.best_val_loss = checkpoint.get('best_val_loss', float('inf'))

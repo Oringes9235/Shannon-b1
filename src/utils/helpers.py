@@ -13,19 +13,29 @@ def set_seed(seed: int = 42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # 仅在 CUDA 可用时设置 CUDA 相关种子与 cudnn 选项
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+            # 保持确定性以便复现（可能降低性能），如需性能可在命令行关闭
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+    except Exception:
+        pass
 
 
 def get_device() -> str:
     """获取可用设备"""
     if torch.cuda.is_available():
         return "cuda"
-    elif torch.backends.mps.is_available():
-        return "mps"
-    else:
-        return "cpu"
+    # 有些 PyTorch 版本可能不包含 mps backend，检查属性再调用
+    if hasattr(torch.backends, 'mps') and callable(getattr(torch.backends.mps, 'is_available', None)):
+        try:
+            if torch.backends.mps.is_available():
+                return 'mps'
+        except Exception:
+            pass
+    return "cpu"
 
 
 def format_time(seconds: float) -> str:

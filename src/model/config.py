@@ -47,6 +47,15 @@ class ModelConfig:
     # 其他
     device: str = "cuda"  # cpu, cuda
     seed: int = 42
+    # 训练改进选项
+    label_smoothing: float = 0.0
+    lr_warmup_steps: int = 0
+    use_cosine_scheduler: bool = True
+    total_steps: int = 0
+    tie_word_embeddings: bool = True
+    # 额外选项
+    gradient_checkpointing: bool = False
+    norm_type: str = "layernorm"  # layernorm | rmsnorm
     
     def __post_init__(self):
         if self.device == "cuda" and not self._has_cuda():

@@ -3,8 +3,8 @@ from setuptools import setup, find_packages
 setup(
     name="shannon-b1",
     version="1.0.0",
-    description="Shannon-b1: A lightweight GPT-style language model",
-    author="Your Name",
+    description="Shannon-b1: A GPT-style language model",
+    author="Xue Fengpeng",
     packages=find_packages(),
     install_requires=[
         "torch>=2.0.0",

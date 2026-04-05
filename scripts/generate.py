@@ -60,6 +60,12 @@ def main():
     parser.add_argument('--top-k', type=int, default=50)
     parser.add_argument('--top-p', type=float, default=None)
     parser.add_argument('--repetition-penalty', type=float, default=1.1, help='重复惩罚系数 (>1 减少重复)')
+    parser.add_argument('--presence-penalty', type=float, default=0.0, help='Presence penalty (subtract from logits for seen tokens)')
+    parser.add_argument('--frequency-penalty', type=float, default=0.0, help='Frequency penalty (subtract scaled by count)')
+    parser.add_argument('--no-repeat-last', action='store_false', dest='ban_immediate_repeat', help='Allow repeating last token')
+    parser.add_argument('--ngram-block', type=int, default=3, help='Block repeating n-grams of this size (0 to disable)')
+    parser.add_argument('--best-of', type=int, default=1, help='Generate this many samples and pick best by log-prob')
+    parser.add_argument('--max-repetition', type=int, default=3, help='Max times a single token may appear in generated output (hard cap)')
     parser.add_argument('--device', type=str, default='cpu')
     
     args = parser.parse_args()
@@ -79,7 +85,11 @@ def main():
             temperature=args.temperature,
             top_k=args.top_k,
             top_p=args.top_p,
-            repetition_penalty=args.repetition_penalty
+            repetition_penalty=args.repetition_penalty,
+            presence_penalty=args.presence_penalty,
+            frequency_penalty=args.frequency_penalty,
+            ban_immediate_repeat=args.ban_immediate_repeat
+            ,ngram_block_size=args.ngram_block, best_of=args.best_of, max_repetition=args.max_repetition
         )
     
     text = tokenizer.decode(generated)

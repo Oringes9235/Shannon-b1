@@ -35,6 +35,11 @@ def parse_args():
     
     parser.add_argument('--no-amp', action='store_true')
     parser.add_argument('--warmup-steps', type=int, default=1000)
+    parser.add_argument('--gradient-checkpointing', action='store_true', help='Enable gradient checkpointing to save memory')
+    parser.add_argument('--norm-type', type=str, default='layernorm', choices=['layernorm', 'rmsnorm'], help='Normalization type')
+    parser.add_argument('--resume', type=str, default=None, help='Path to checkpoint to resume from')
+    parser.add_argument('--label-smoothing', type=float, default=0.0)
+    parser.add_argument('--tie-embeddings', action='store_true', help='Tie token embedding and output projection')
     parser.add_argument('--patience', type=int, default=10)
     
     parser.add_argument('--tokenizer', type=str, default='char', choices=['char', 'bpe'])
@@ -94,6 +99,11 @@ def main():
         seq_len=args.seq_len,
         device=args.device,
         early_stopping_patience=args.patience,
+        label_smoothing=args.label_smoothing,
+        lr_warmup_steps=args.warmup_steps,
+        tie_word_embeddings=args.tie_embeddings,
+        gradient_checkpointing=args.gradient_checkpointing,
+        norm_type=args.norm_type,
     )
     
     print("\n🏗️ Creating model...")
@@ -103,12 +113,37 @@ def main():
     print(f"   Parameters: {total_params:,}")
     print(f"   Size: {total_params * 4 / 1024 / 1024:.2f} MB")
     
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
+    # 优化器参数分组：对偏置、归一化层和嵌入不使用 weight decay
+    decay_params = []
+    no_decay_params = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        lname = name.lower()
+        if lname.endswith('bias') or 'norm' in lname or 'ln_' in lname or 'rmsnorm' in lname or 'embedding' in lname or 'pos_embedding' in lname:
+            no_decay_params.append(param)
+        else:
+            decay_params.append(param)
+
+    optimizer = torch.optim.AdamW(
+        [
+            {'params': decay_params, 'weight_decay': config.weight_decay},
+            {'params': no_decay_params, 'weight_decay': 0.0}
+        ],
+        lr=config.learning_rate
+    )
     
     total_steps = len(train_loader) * args.epochs // args.grad_accum
     scheduler = CosineAnnealingWarmupLR(optimizer, warmup_steps=args.warmup_steps, total_steps=total_steps)
     
     trainer = ImprovedTrainer(model, train_loader, val_loader, config, optimizer, scheduler)
+    # 恢复训练（如果提供 checkpoint）
+    if args.resume:
+        if os.path.exists(args.resume):
+            trainer.load_checkpoint(args.resume)
+        else:
+            print(f"⚠️ Resume checkpoint not found: {args.resume}")
+
     history = trainer.train(args.epochs)
     
     trainer.save_checkpoint(args.save_path)

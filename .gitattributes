@@ -1,2 +1,3 @@
- *.py linguist-language=python
- *.sh linguist-language=Shell
+*.py linguist-language=Python
+*.sh linguist-language=Shell
+*.yaml linguist-language=YAML

@@ -79,13 +79,15 @@ class CharTokenizer:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
         self.idx_to_char = {}
-        for k, v in self.char_to_idx.items():
+        # char_to_idx: mapping from character (str) -> index (int)
+        # we need idx_to_char as index (int) -> character (str)
+        for ch, idx in self.char_to_idx.items():
             try:
-                idx = int(k)
+                self.idx_to_char[int(idx)] = ch
             except (ValueError, TypeError):
-                idx = k
-            self.idx_to_char[idx] = v
-        self.special_tokens = data['special_tokens']
+                # fallback: keep original
+                self.idx_to_char[idx] = ch
+        self.special_tokens = data.get('special_tokens', self.special_tokens)
 
 
 class BPETokenizer:
@@ -217,20 +219,28 @@ class BPETokenizer:
         return tokens
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
-        chars = []
+        chars: List[str] = []
         for t in tokens:
             if t in self.idx_to_token:
                 token = self.idx_to_token[t]
                 if skip_special and token in self.special_tokens:
                     continue
-                if token == '</w>':
+
+                # 处理以 '</w>' 结尾的 token（表示单词结尾），例如 'w</w>' -> 'w '
+                if isinstance(token, str) and token.endswith('</w>'):
+                    body = token[:-4]
+                    if body:
+                        chars.append(body)
+                    chars.append(' ')
+                elif token == '</w>':
                     chars.append(' ')
                 else:
                     chars.append(token)
             else:
                 chars.append('<UNK>')
-        
+
         text = ''.join(chars)
+        # 规范化空白并去掉首尾空格
         text = re.sub(r'\s+', ' ', text).strip()
         return text
     
@@ -341,9 +351,9 @@ class SimpleBPETokenizer:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
         self.idx_to_char = {}
-        for k, v in self.char_to_idx.items():
+        for ch, idx in self.char_to_idx.items():
             try:
-                self.idx_to_char[int(k)] = v
-            except ValueError:
-                self.idx_to_char[k] = v
-        self.special_tokens = data['special_tokens']
+                self.idx_to_char[int(idx)] = ch
+            except (ValueError, TypeError):
+                self.idx_to_char[idx] = ch
+        self.special_tokens = data.get('special_tokens', self.special_tokens)
