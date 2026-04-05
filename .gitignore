@@ -20,3 +20,9 @@ shannon_b1.pt
 .pytest_cache
 
 checkpoints/
+
+experiments/logs/
+
+experiments/results/
+
+
