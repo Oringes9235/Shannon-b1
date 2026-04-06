@@ -23,9 +23,17 @@ const TrainingMonitor = ({ apiUrl }) => {
     seq_len: 64,
     lr: 0.0005,
     dropout: 0.3,
-    weight_decay: 0.1
+    weight_decay: 0.1,
+    patience: 10,
+    num_heads: 8,
+    grad_accum: 1,
+    warmup_steps: 1000
   }
-  const initialConfig = savedConfig ? JSON.parse(savedConfig) : defaultConfig
+  
+  // 合并默认配置和保存的配置，确保新参数有默认值
+  const initialConfig = savedConfig 
+    ? { ...defaultConfig, ...JSON.parse(savedConfig) }
+    : defaultConfig
   
   // 初始化训练配置状态，包含模型架构和训练超参数
   const [trainingConfig, setTrainingConfig] = useState(initialConfig)
@@ -269,6 +277,46 @@ const TrainingMonitor = ({ apiUrl }) => {
               step="0.05"
               value={trainingConfig.dropout}
               onChange={(e) => setTrainingConfig({...trainingConfig, dropout: parseFloat(e.target.value)})}
+              className="w-full px-3 py-1 bg-gray-700 border border-gray-600 rounded"
+              disabled={trainingStatus.is_running}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Patience (早停)</label>
+            <input
+              type="number"
+              value={trainingConfig.patience}
+              onChange={(e) => setTrainingConfig({...trainingConfig, patience: parseInt(e.target.value)})}
+              className="w-full px-3 py-1 bg-gray-700 border border-gray-600 rounded"
+              disabled={trainingStatus.is_running}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">注意力头数</label>
+            <input
+              type="number"
+              value={trainingConfig.num_heads}
+              onChange={(e) => setTrainingConfig({...trainingConfig, num_heads: parseInt(e.target.value)})}
+              className="w-full px-3 py-1 bg-gray-700 border border-gray-600 rounded"
+              disabled={trainingStatus.is_running}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">梯度累积</label>
+            <input
+              type="number"
+              value={trainingConfig.grad_accum}
+              onChange={(e) => setTrainingConfig({...trainingConfig, grad_accum: parseInt(e.target.value)})}
+              className="w-full px-3 py-1 bg-gray-700 border border-gray-600 rounded"
+              disabled={trainingStatus.is_running}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">预热步数</label>
+            <input
+              type="number"
+              value={trainingConfig.warmup_steps}
+              onChange={(e) => setTrainingConfig({...trainingConfig, warmup_steps: parseInt(e.target.value)})}
               className="w-full px-3 py-1 bg-gray-700 border border-gray-600 rounded"
               disabled={trainingStatus.is_running}
             />

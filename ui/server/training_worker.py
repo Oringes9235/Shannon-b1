@@ -96,6 +96,8 @@ class TrainingWorker:
                 "tokenizer": "--tokenizer",
                 "vocab_size": "--vocab-size",
                 "patience": "--patience",
+                "grad_accum": "--grad-accum",
+                "warmup_steps": "--warmup-steps",
             }
 
             for k, flag in arg_map.items():

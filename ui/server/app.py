@@ -15,6 +15,12 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
 
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -53,6 +59,10 @@ class TrainRequest(BaseModel):
     lr: float = 0.0005
     dropout: float = 0.3
     weight_decay: float = 0.1
+    patience: int = 10  # 早停耐心值
+    num_heads: int = 8  # 注意力头数
+    grad_accum: int = 1  # 梯度累积步数
+    warmup_steps: int = 1000  # 学习率预热步数
 
 
 # 全局状态
@@ -445,6 +455,52 @@ async def root():
         dict: 服务信息字典
     """
     return {"message": "Shannon-b1 API Server", "docs": "/docs"}
+
+
+@app.get("/api/system/stats")
+async def get_system_stats():
+    """
+    获取系统资源使用情况
+    
+    Returns:
+        dict: 包含CPU、内存、GPU和磁盘使用率的字典
+    """
+    stats = {
+        "cpu_percent": None,
+        "memory_percent": None,
+        "gpu_memory": None,
+        "disk_usage": None
+    }
+    
+    if not PSUTIL_AVAILABLE:
+        return stats
+    
+    try:
+        # CPU使用率
+        stats["cpu_percent"] = psutil.cpu_percent(interval=0.5)
+        
+        # 内存使用率
+        memory = psutil.virtual_memory()
+        stats["memory_percent"] = memory.percent
+        
+        # GPU显存使用率（如果有）
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_memory_allocated = torch.cuda.memory_allocated()
+                gpu_memory_total = torch.cuda.get_device_properties(0).total_memory
+                stats["gpu_memory"] = round((gpu_memory_allocated / gpu_memory_total) * 100, 2)
+        except Exception:
+            pass
+        
+        # 磁盘使用率
+        disk = psutil.disk_usage('/')
+        stats["disk_usage"] = disk.percent
+        
+    except Exception as e:
+        print(f"Failed to get system stats: {e}")
+    
+    return stats
 
 
 if __name__ == "__main__":
