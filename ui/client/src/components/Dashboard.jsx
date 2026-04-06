@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { LineChart, Line, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 /**
  * Dashboard组件 - 显示系统状态和监控数据
@@ -21,35 +20,48 @@ const Dashboard = ({ apiUrl, status }) => {
   })
 
   /**
-   * 设置定时器每2秒获取一次系统统计数据
+   * 设置定时器每5秒获取一次系统统计数据
    */
   useEffect(() => {
-    const interval = setInterval(fetchSystemStats, 2000)
+    const interval = setInterval(fetchSystemStats, 5000)
+    // 立即获取一次
+    fetchSystemStats()
     return () => clearInterval(interval)
-  }, [])
+  }, [apiUrl])
 
   /**
    * 异步获取系统统计信息
-   * 尝试从API获取实时数据，失败时使用随机模拟数据
+   * 尝试从API获取实时数据，如果后端不支持则显示N/A
    */
   const fetchSystemStats = async () => {
     try {
       // 获取系统信息（需要后端支持）
-      const res = await axios.get(`${apiUrl}/system/stats`)
+      const res = await axios.get(`${apiUrl}/system/stats`, { timeout: 2000 })
       setSystemStats(res.data)
     } catch (error) {
-      // 使用模拟数据
+      // 后端不支持此接口时，显示N/A而不是假数据
       setSystemStats({
-        cpu_percent: Math.random() * 60 + 20,
-        memory_percent: Math.random() * 40 + 30,
-        gpu_memory: status.model_loaded ? Math.random() * 50 + 20 : 0,
-        disk_usage: 45
+        cpu_percent: null,
+        memory_percent: null,
+        gpu_memory: null,
+        disk_usage: null
       })
     }
   }
 
   /**
+   * 格式化数据显示：处理null值显示为"N/A"
+   */
+  const formatValue = (value) => {
+    if (value === null || value === undefined) {
+      return 'N/A'
+    }
+    return `${Math.round(value)}%`
+  }
+
+  /**
    * 图表数据格式化：将系统统计信息转换为饼图可用的数据结构
+   * 过滤掉null值
    * @type {Array} 包含名称、数值和颜色的图表数据数组
    */
   const chartData = [
@@ -57,7 +69,7 @@ const Dashboard = ({ apiUrl, status }) => {
     { name: '内存', value: systemStats.memory_percent, color: '#10b981' },
     { name: 'GPU', value: systemStats.gpu_memory, color: '#8b5cf6' },
     { name: '磁盘', value: systemStats.disk_usage, color: '#f59e0b' }
-  ]
+  ].filter(item => item.value !== null)
 
   return (
     <div className="space-y-6">
@@ -108,22 +120,34 @@ const Dashboard = ({ apiUrl, status }) => {
       {/* 系统资源使用情况可视化区域 */}
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
         <h2 className="text-xl font-semibold mb-4">📊 系统资源</h2>
-        <div className="grid grid-cols-2 gap-6">
-          {chartData.map((item) => (
-            <div key={item.name}>
-              <div className="flex justify-between text-sm text-gray-400 mb-1">
-                <span>{item.name} 使用率</span>
-                <span>{Math.round(item.value)}%</span>
+        
+        {chartData.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            <p className="text-lg">⚠️ 系统监控功能未启用</p>
+            <p className="text-sm mt-2">后端需要提供 /api/system/stats 接口才能显示实时数据</p>
+            <p className="text-xs mt-1">当前仅显示模型和训练状态信息</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-6">
+            {chartData.map((item) => (
+              <div key={item.name}>
+                <div className="flex justify-between text-sm text-gray-400 mb-1">
+                  <span>{item.name} 使用率</span>
+                  <span>{formatValue(item.value)}</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    className="h-2 rounded-full transition-all duration-300"
+                    style={{ 
+                      width: item.value !== null ? `${item.value}%` : '0%',
+                      backgroundColor: item.color 
+                    }}
+                  ></div>
+                </div>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div
-                  className="h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${item.value}%`, backgroundColor: item.color }}
-                ></div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 模型详细信息展示区域 - 仅在模型已加载时显示 */}

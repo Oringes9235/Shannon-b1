@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { subscribe } from '../ws'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts'
@@ -11,8 +11,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
  * @returns {JSX.Element} 训练监控界面组件
  */
 const TrainingMonitor = ({ apiUrl }) => {
-  // 初始化训练配置状态，包含模型架构和训练超参数
-  const [trainingConfig, setTrainingConfig] = useState({
+  // 从localStorage读取保存的训练配置
+  const savedConfig = localStorage.getItem('shannon_training_config')
+  const defaultConfig = {
     tokenizer: 'char',
     vocab_size: 200,
     d_model: 128,
@@ -23,7 +24,16 @@ const TrainingMonitor = ({ apiUrl }) => {
     lr: 0.0005,
     dropout: 0.3,
     weight_decay: 0.1
-  })
+  }
+  const initialConfig = savedConfig ? JSON.parse(savedConfig) : defaultConfig
+  
+  // 初始化训练配置状态，包含模型架构和训练超参数
+  const [trainingConfig, setTrainingConfig] = useState(initialConfig)
+
+  // 当trainingConfig变化时，保存到localStorage
+  useEffect(() => {
+    localStorage.setItem('shannon_training_config', JSON.stringify(trainingConfig))
+  }, [trainingConfig])
 
   // 训练状态：运行状态和进度信息
   const [trainingStatus, setTrainingStatus] = useState({ is_running: false, progress: 0 })
@@ -39,6 +49,17 @@ const TrainingMonitor = ({ apiUrl }) => {
 
   // 加载状态，用于控制按钮状态
   const [loading, setLoading] = useState(false)
+
+  // 日志容器引用，用于自动滚动
+  const logsContainerRef = useRef(null)
+
+  // 当日志更新时，自动滚动到底部（使用即时滚动，更快速）
+  useEffect(() => {
+    if (logsContainerRef.current) {
+      // 直接设置scrollTop到最大值，实现即时滚动
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight
+    }
+  }, [logs])
 
   // 设置WebSocket订阅，用于接收实时训练消息
   useEffect(() => {
@@ -61,7 +82,13 @@ const TrainingMonitor = ({ apiUrl }) => {
    * @param {Object} data.data - 消息携带的具体数据
    */
   const handleWebSocketMessage = (data) => {
-    if (data.type === 'training_progress') {
+    if (data.type === 'training_log') {
+      // 处理实时训练日志
+      setLogs(prev => [...prev, {
+        time: new Date().toLocaleTimeString(),
+        message: data.data.line
+      }])
+    } else if (data.type === 'training_progress') {
       setTrainingStatus(data.data)
     } else if (data.type === 'training_epoch_complete') {
       setLossHistory(prev => [...prev, {
@@ -78,14 +105,17 @@ const TrainingMonitor = ({ apiUrl }) => {
       setLoading(false)
       setLogs(prev => [...prev, {
         time: new Date().toLocaleTimeString(),
-        message: `✅ Training completed! Best loss: ${data.data.best_loss.toFixed(4)}`
+        message: `✅ Training completed! Best loss: ${data.data.best_loss?.toFixed(4) || 'N/A'}`
       }])
     } else if (data.type === 'training_error') {
       setLogs(prev => [...prev, {
         time: new Date().toLocaleTimeString(),
-        message: `❌ Error: ${data.data.error}`
+        message: `❌ Error: ${data.data.error || data.data.returncode}`
       }])
       setLoading(false)
+    } else if (data.type === 'training_started') {
+      // 训练已启动
+      setTrainingStatus(data.data)
     }
   }
 
@@ -319,7 +349,10 @@ const TrainingMonitor = ({ apiUrl }) => {
       {logs.length > 0 && (
         <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h2 className="text-xl font-semibold mb-4">📋 训练日志</h2>
-          <div className="bg-gray-900 rounded-lg p-3 h-48 overflow-y-auto font-mono text-xs">
+          <div 
+            ref={logsContainerRef}
+            className="bg-gray-900 rounded-lg p-3 h-48 overflow-y-auto font-mono text-xs"
+          >
             {logs.map((log, idx) => (
               <div key={idx} className="text-gray-300 mb-1">
                 <span className="text-gray-500">[{log.time}]</span> {log.message}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-文本生成脚本 - 支持重复惩罚
+流式文本生成脚本 - 实时显示生成过程
 """
 
 import sys
@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 import argparse
+import time
 
 from src.model import ShannonB1, ModelConfig
 from src.data import CharTokenizer, BPETokenizer
@@ -66,50 +67,75 @@ def load_model(model_path: str, device: str = 'cpu'):
 
 def main():
     # 解析命令行参数
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model-path', type=str, required=True)
-    parser.add_argument('--prompt', type=str, default="The ")
-    parser.add_argument('--max-tokens', type=int, default=100)
-    parser.add_argument('--temperature', type=float, default=0.8)
-    parser.add_argument('--top-k', type=int, default=50)
-    parser.add_argument('--top-p', type=float, default=None)
-    parser.add_argument('--repetition-penalty', type=float, default=1.1, help='重复惩罚系数 (>1 减少重复)')
-    parser.add_argument('--presence-penalty', type=float, default=0.0, help='Presence penalty (subtract from logits for seen tokens)')
-    parser.add_argument('--frequency-penalty', type=float, default=0.0, help='Frequency penalty (subtract scaled by count)')
-    parser.add_argument('--no-repeat-last', action='store_false', dest='ban_immediate_repeat', help='Allow repeating last token')
-    parser.add_argument('--ngram-block', type=int, default=3, help='Block repeating n-grams of this size (0 to disable)')
-    parser.add_argument('--best-of', type=int, default=1, help='Generate this many samples and pick best by log-prob')
-    parser.add_argument('--max-repetition', type=int, default=3, help='Max times a single token may appear in generated output (hard cap)')
-    parser.add_argument('--device', type=str, default='cpu')
+    parser = argparse.ArgumentParser(description='流式文本生成')
+    parser.add_argument('--model-path', type=str, required=True, help='模型文件路径')
+    parser.add_argument('--prompt', type=str, default="The ", help='提示词')
+    parser.add_argument('--max-tokens', type=int, default=100, help='最大生成token数')
+    parser.add_argument('--temperature', type=float, default=0.8, help='温度参数')
+    parser.add_argument('--top-k', type=int, default=50, help='Top-K采样参数')
+    parser.add_argument('--top-p', type=float, default=None, help='Top-P采样参数')
+    parser.add_argument('--repetition-penalty', type=float, default=1.1, help='重复惩罚系数')
+    parser.add_argument('--device', type=str, default='cpu', help='运行设备')
+    parser.add_argument('--delay', type=float, default=0.05, help='每个token之间的延迟（秒），模拟打字效果')
     
     args = parser.parse_args()
     
+    print("🔄 加载模型...")
     model, tokenizer, config = load_model(args.model_path, args.device)
     
-    print(f"Model: vocab={config.vocab_size}, d_model={config.d_model}")
-    print(f"Tokenizer: {'BPE' if hasattr(tokenizer, 'merges') else 'Char'}")
+    print(f"✅ 模型加载完成: vocab={config.vocab_size}, d_model={config.d_model}")
+    print(f"📝 分词器类型: {'BPE' if hasattr(tokenizer, 'merges') else 'Char'}")
+    print(f"\n{'='*60}")
+    print(f"💬 Prompt: {args.prompt}")
+    print(f"{'='*60}\n")
     
+    # 编码提示词
     start_tokens = tokenizer.encode(args.prompt)[:50]
-    print(f"Start tokens: {start_tokens[:10]}...")
     
-    # 使用模型生成文本
-    with torch.no_grad():
-        generated = model.generate(
+    # 流式生成
+    print("🚀 开始流式生成:\n")
+    
+    generated_tokens = list(start_tokens)
+    start_time = time.time()
+    
+    try:
+        for token_id, probability in model.generate_stream(
             start_tokens,
             args.max_tokens,
             temperature=args.temperature,
             top_k=args.top_k,
             top_p=args.top_p,
-            repetition_penalty=args.repetition_penalty,
-            presence_penalty=args.presence_penalty,
-            frequency_penalty=args.frequency_penalty,
-            ban_immediate_repeat=args.ban_immediate_repeat
-            ,ngram_block_size=args.ngram_block, best_of=args.best_of, max_repetition=args.max_repetition
-        )
-    
-    text = tokenizer.decode(generated)
-    print(f"\n📝 Prompt: {args.prompt}")
-    print(f"💬 Generated: {text}")
+            repetition_penalty=args.repetition_penalty
+        ):
+            generated_tokens.append(token_id)
+            
+            # 解码当前文本
+            current_text = tokenizer.decode(generated_tokens)
+            current_text = current_text.replace('</w>', ' ').replace('  ', ' ')
+            
+            # 清屏并显示（简单的刷新效果）
+            print(f"\r{current_text}", end='', flush=True)
+            
+            # 添加延迟模拟打字效果
+            if args.delay > 0:
+                time.sleep(args.delay)
+        
+        # 生成完成
+        elapsed_time = time.time() - start_time
+        tokens_generated = len(generated_tokens) - len(start_tokens)
+        
+        print(f"\n\n{'='*60}")
+        print(f"✅ 生成完成!")
+        print(f"📊 统计信息:")
+        print(f"   - 生成token数: {tokens_generated}")
+        print(f"   - 耗时: {elapsed_time:.2f}秒")
+        print(f"   - 速度: {tokens_generated/elapsed_time:.2f} tokens/秒")
+        print(f"{'='*60}")
+        
+    except KeyboardInterrupt:
+        print("\n\n⚠️  用户中断生成")
+    except Exception as e:
+        print(f"\n\n❌ 生成出错: {e}")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 import math
-from typing import Optional, List
+from typing import Optional, List, Generator, Tuple
 
 from .config import ModelConfig
 from .layers import PositionalEncoding, CausalMask
@@ -179,7 +179,79 @@ class ShannonB1(nn.Module):
                 # 获取最后一个位置
                 last_logits = logits[0, -1, :].float()
 
-                # 应用温度
+                # 应用温度（处理temperature=0的情况）
+                if temperature == 0.0:
+                    # 贪婪解码模式：先应用所有约束，然后argmax
+                    
+                    # 重复惩罚
+                    if repetition_penalty is not None and repetition_penalty != 1.0:
+                        generated = set(cur_tokens[0].tolist())
+                        for token_id in generated:
+                            if last_logits[token_id] < 0:
+                                last_logits[token_id] *= float(repetition_penalty)
+                            else:
+                                last_logits[token_id] /= float(repetition_penalty)
+                    
+                    # presence / frequency penalty
+                    if presence_penalty != 0.0 or frequency_penalty != 0.0:
+                        from collections import Counter
+                        counts = Counter(cur_tokens[0].tolist())
+                        for tok_id, cnt in counts.items():
+                            if presence_penalty != 0.0:
+                                last_logits[tok_id] -= float(presence_penalty)
+                            if frequency_penalty != 0.0 and cnt > 0:
+                                last_logits[tok_id] -= float(frequency_penalty) * float(cnt)
+                    
+                    # 避免直接重复上一个 token
+                    if ban_immediate_repeat and cur_tokens.size(1) > 0:
+                        prev_token = int(cur_tokens[0, -1].item())
+                        last_logits[prev_token] = float('-inf')
+                    
+                    # n-gram 重复阻断
+                    if ngram_block_size > 1 and cur_tokens.size(1) >= 1:
+                        banned = []
+                        seq_list = [int(x) for x in cur_tokens[0].tolist()]
+                        for candidate in range(last_logits.size(0)):
+                            will_form_repeat = False
+                            for n in range(2, ngram_block_size + 1):
+                                if len(seq_list) + 1 >= n:
+                                    prev_ngram = tuple(seq_list[-(n-1):] + [candidate])
+                                    if prev_ngram in seen_ngrams:
+                                        will_form_repeat = True
+                                        break
+                            if will_form_repeat:
+                                banned.append(candidate)
+                        if banned:
+                            last_logits[torch.tensor(banned, device=last_logits.device)] = float('-inf')
+                    
+                    # 最大重复限制
+                    max_rep = int(max_repetition) if max_repetition is not None else int(getattr(self.config, 'max_repetition', 3))
+                    for tok_id, cnt in list(token_counts.items()):
+                        if cnt >= max_rep:
+                            last_logits[tok_id] = float('-inf')
+                    
+                    # 贪婪解码
+                    next_token = torch.argmax(last_logits).item()
+                    probs = torch.softmax(last_logits, dim=-1)
+                    logprob = torch.log(probs[next_token] + 1e-12).item()
+                    logprob_sum += logprob
+                    
+                    # 更新序列
+                    next_token_tensor = torch.tensor([[next_token]], device=device)
+                    cur_tokens = torch.cat([cur_tokens, next_token_tensor], dim=1)
+                    
+                    # 更新状态
+                    token_counts[next_token] += 1
+                    seq_now = [int(x) for x in cur_tokens[0].tolist()]
+                    L = len(seq_now)
+                    for n in range(2, ngram_block_size + 1):
+                        if L >= n:
+                            ng = tuple(seq_now[-n:])
+                            seen_ngrams.add(ng)
+                    
+                    continue
+                
+                # 正常温度下的处理
                 if temperature != 1.0:
                     last_logits = last_logits / float(temperature)
 
@@ -209,7 +281,7 @@ class ShannonB1(nn.Module):
 
                 # 重复惩罚（参考 HuggingFace 实现）
                 if repetition_penalty is not None and repetition_penalty != 1.0:
-                    generated = set(tokens[0].tolist())
+                    generated = set(cur_tokens[0].tolist())
                     for token_id in generated:
                         if last_logits[token_id] < 0:
                             last_logits[token_id] *= float(repetition_penalty)
@@ -219,7 +291,7 @@ class ShannonB1(nn.Module):
                 # presence / frequency penalty: 在 logit 上做线性惩罚
                 if presence_penalty != 0.0 or frequency_penalty != 0.0:
                     from collections import Counter
-                    counts = Counter(tokens[0].tolist())
+                    counts = Counter(cur_tokens[0].tolist())
                     for tok_id, cnt in counts.items():
                         if presence_penalty != 0.0:
                             last_logits[tok_id] -= float(presence_penalty)
@@ -227,8 +299,8 @@ class ShannonB1(nn.Module):
                             last_logits[tok_id] -= float(frequency_penalty) * float(cnt)
 
                 # 避免直接重复上一个 token（可选）
-                if ban_immediate_repeat and tokens.size(1) > 0:
-                    prev_token = int(tokens[0, -1].item())
+                if ban_immediate_repeat and cur_tokens.size(1) > 0:
+                    prev_token = int(cur_tokens[0, -1].item())
                     last_logits[prev_token] = float('-inf')
 
                 # n-gram 重复阻断（严格模式）：检查所有 n <= ngram_block_size，若候选会形成已见 ngram，则屏蔽
@@ -300,6 +372,236 @@ class ShannonB1(nn.Module):
                 best_seq = seq
 
         return best_seq
+
+    def generate_stream(
+        self,
+        start_tokens: List[int],
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        repetition_penalty: float = 1.0,
+        presence_penalty: float = 0.0,
+        frequency_penalty: float = 0.0,
+        ban_immediate_repeat: bool = True,
+        ngram_block_size: int = 3,
+        max_repetition: Optional[int] = None,
+    ) -> Generator[Tuple[int, float], None, None]:
+        """
+        流式生成文本，逐个token yield
+        
+        Args:
+            start_tokens: 起始 token 序列
+            max_new_tokens: 最大生成 token 数
+            temperature: 温度系数 (越高越随机，0.0为贪婪解码)
+            top_k: Top-K 采样
+            top_p: Top-P (nucleus) 采样
+            repetition_penalty: 重复惩罚系数
+            presence_penalty: 存在惩罚系数
+            frequency_penalty: 频率惩罚系数
+            ban_immediate_repeat: 是否禁止立即重复
+            ngram_block_size: N-gram 阻断大小
+            max_repetition: 最大重复次数限制
+        
+        Yields:
+            Tuple[int, float]: (token_id, probability)
+        """
+        self.eval()
+        device = next(self.parameters()).device
+        cur_tokens = torch.tensor([start_tokens], device=device)
+        
+        from collections import Counter
+        seen_ngrams = set()
+        token_counts = Counter(start_tokens)
+        
+        for step in range(max_new_tokens):
+            # 前向传播
+            with torch.no_grad():
+                logits = self.forward(cur_tokens)
+            
+            # 获取最后一个位置的logits
+            last_logits = logits[0, -1, :].float()
+            
+            # 应用温度（处理temperature=0的情况）
+            if temperature == 0.0:
+                # 先应用所有惩罚和约束（与generate_stream一致）
+                
+                # 重复惩罚
+                if repetition_penalty is not None and repetition_penalty != 1.0:
+                    generated = set(cur_tokens[0].tolist())
+                    for token_id in generated:
+                        if last_logits[token_id] < 0:
+                            last_logits[token_id] *= float(repetition_penalty)
+                        else:
+                            last_logits[token_id] /= float(repetition_penalty)
+                
+                # presence / frequency penalty
+                if presence_penalty != 0.0 or frequency_penalty != 0.0:
+                    from collections import Counter
+                    counts = Counter(cur_tokens[0].tolist())
+                    for tok_id, cnt in counts.items():
+                        if presence_penalty != 0.0:
+                            last_logits[tok_id] -= float(presence_penalty)
+                        if frequency_penalty != 0.0 and cnt > 0:
+                            last_logits[tok_id] -= float(frequency_penalty) * float(cnt)
+                
+                # 避免直接重复上一个 token
+                if ban_immediate_repeat and cur_tokens.size(1) > 0:
+                    prev_token = int(cur_tokens[0, -1].item())
+                    last_logits[prev_token] = float('-inf')
+                
+                # n-gram 重复阻断
+                if ngram_block_size > 1 and cur_tokens.size(1) >= 1:
+                    banned = []
+                    seq_list = [int(x) for x in cur_tokens[0].tolist()]
+                    for candidate in range(last_logits.size(0)):
+                        will_form_repeat = False
+                        for n in range(2, ngram_block_size + 1):
+                            if len(seq_list) + 1 >= n:
+                                prev_ngram = tuple(seq_list[-(n-1):] + [candidate])
+                                if prev_ngram in seen_ngrams:
+                                    will_form_repeat = True
+                                    break
+                        if will_form_repeat:
+                            banned.append(candidate)
+                    if banned:
+                        last_logits[torch.tensor(banned, device=last_logits.device)] = float('-inf')
+                
+                # 最大重复限制：在采样前屏蔽超过限制的token
+                max_rep = int(max_repetition) if max_repetition is not None else int(getattr(self.config, 'max_repetition', 3))
+                for tok_id, cnt in list(token_counts.items()):
+                    if cnt >= max_rep:
+                        last_logits[tok_id] = float('-inf')
+                
+                # 贪婪解码：直接选择概率最高的token
+                next_token = torch.argmax(last_logits).item()
+                probs = torch.softmax(last_logits, dim=-1)
+                probability = probs[next_token].item()
+                
+                # Yield token信息
+                yield (next_token, probability)
+                
+                # 更新状态
+                token_counts[next_token] += 1
+                next_token_tensor = torch.tensor([[next_token]], device=device)
+                cur_tokens = torch.cat([cur_tokens, next_token_tensor], dim=1)
+                
+                # 更新 n-gram 记录
+                seq_now = [int(x) for x in cur_tokens[0].tolist()]
+                L = len(seq_now)
+                for n in range(2, ngram_block_size + 1):
+                    if L >= n:
+                        ng = tuple(seq_now[-n:])
+                        seen_ngrams.add(ng)
+                continue
+            
+            # 正常温度下的处理
+            if temperature != 1.0:
+                last_logits = last_logits / float(temperature)
+            
+            vocab_size = last_logits.size(0)
+            
+            # Top-K 采样
+            if top_k is not None and top_k > 0 and top_k < vocab_size:
+                topk_vals, _ = torch.topk(last_logits, top_k)
+                threshold = topk_vals[-1]
+                last_logits = torch.where(
+                    last_logits < threshold,
+                    torch.tensor(float('-inf'), device=last_logits.device),
+                    last_logits
+                )
+            
+            # Top-P (nucleus) 采样
+            if top_p is not None and 0.0 < top_p < 1.0:
+                sorted_logits, sorted_indices = torch.sort(last_logits, descending=True)
+                sorted_probs = torch.softmax(sorted_logits, dim=-1)
+                cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+                
+                keep_mask = cumulative_probs <= top_p
+                if not keep_mask.any():
+                    keep_mask[0] = True
+                
+                remove_indices = sorted_indices[~keep_mask]
+                last_logits[remove_indices] = float('-inf')
+            
+            # 重复惩罚
+            if repetition_penalty is not None and repetition_penalty != 1.0:
+                generated = set(cur_tokens[0].tolist())
+                for token_id in generated:
+                    if last_logits[token_id] < 0:
+                        last_logits[token_id] *= float(repetition_penalty)
+                    else:
+                        last_logits[token_id] /= float(repetition_penalty)
+            
+            # presence / frequency penalty
+            if presence_penalty != 0.0 or frequency_penalty != 0.0:
+                counts = Counter(cur_tokens[0].tolist())
+                for tok_id, cnt in counts.items():
+                    if presence_penalty != 0.0:
+                        last_logits[tok_id] -= float(presence_penalty)
+                    if frequency_penalty != 0.0 and cnt > 0:
+                        last_logits[tok_id] -= float(frequency_penalty) * float(cnt)
+            
+            # 避免直接重复上一个 token
+            if ban_immediate_repeat and cur_tokens.size(1) > 0:
+                prev_token = int(cur_tokens[0, -1].item())
+                last_logits[prev_token] = float('-inf')
+            
+            # n-gram 重复阻断
+            if ngram_block_size > 1 and cur_tokens.size(1) >= 1:
+                banned = []
+                seq_list = [int(x) for x in cur_tokens[0].tolist()]
+                for candidate in range(last_logits.size(0)):
+                    will_form_repeat = False
+                    for n in range(2, ngram_block_size + 1):
+                        if len(seq_list) + 1 >= n:
+                            prev_ngram = tuple(seq_list[-(n-1):] + [candidate])
+                            if prev_ngram in seen_ngrams:
+                                will_form_repeat = True
+                                break
+                    if will_form_repeat:
+                        banned.append(candidate)
+                if banned:
+                    last_logits[torch.tensor(banned, device=last_logits.device)] = float('-inf')
+            
+            # 最大重复限制：在采样前屏蔽超过限制的token（与generate方法一致）
+            max_rep = int(max_repetition) if max_repetition is not None else int(getattr(self.config, 'max_repetition', 3))
+            for tok_id, cnt in list(token_counts.items()):
+                if cnt >= max_rep:
+                    last_logits[tok_id] = float('-inf')
+            
+            # 计算概率分布
+            probs = torch.softmax(last_logits, dim=-1)
+            if torch.isnan(probs).any():
+                probs = torch.nn.functional.softmax(
+                    last_logits.float().masked_fill(torch.isinf(last_logits), -1e9),
+                    dim=-1
+                )
+            
+            # 采样下一个 token
+            next_token = torch.multinomial(probs, 1).item()
+            probability = probs[next_token].item()
+            
+            # 检查最大重复限制
+            max_rep = int(max_repetition) if max_repetition is not None else int(getattr(self.config, 'max_repetition', 3))
+            if token_counts[next_token] >= max_rep:
+                break
+            
+            # Yield token信息
+            yield (next_token, probability)
+            
+            # 更新状态
+            token_counts[next_token] += 1
+            next_token_tensor = torch.tensor([[next_token]], device=device)
+            cur_tokens = torch.cat([cur_tokens, next_token_tensor], dim=1)
+            
+            # 更新 n-gram 记录
+            seq_now = [int(x) for x in cur_tokens[0].tolist()]
+            L = len(seq_now)
+            for n in range(2, ngram_block_size + 1):
+                if L >= n:
+                    ng = tuple(seq_now[-n:])
+                    seen_ngrams.add(ng)
 
 
 class ShannonB1Encoder(nn.Module):

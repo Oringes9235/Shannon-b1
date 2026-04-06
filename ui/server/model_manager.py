@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import torch
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Generator
 
 
 class ModelManager:
@@ -154,4 +154,60 @@ class ModelManager:
             "generated_text": text,
             "tokens_generated": len(generated) - len(start_tokens),
             "temperature": temperature
+        }
+    
+    def generate_stream(self, prompt: str, max_tokens: int = 100, temperature: float = 0.8,
+                       top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15) -> Generator[Dict[str, Any], None, None]:
+        """
+        流式生成文本
+        
+        Args:
+            prompt (str): 提示文本
+            max_tokens (int): 最大生成token数，默认100
+            temperature (float): 温度参数，默认0.8
+            top_k (int): Top-k采样参数，默认40
+            top_p (float): Top-p采样参数，默认0.9
+            repetition_penalty (float): 重复惩罚参数，默认1.15
+            
+        Yields:
+            Dict[str, Any]: 包含生成片段的字典
+        """
+        if not self.model:
+            raise ValueError("No model loaded")
+        
+        # 编码提示词
+        start_tokens = self.tokenizer.encode(prompt)[:50]
+        
+        # 流式生成
+        generated_tokens = list(start_tokens)
+        for token_id, probability in self.model.generate_stream(
+            start_tokens,
+            max_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty
+        ):
+            generated_tokens.append(token_id)
+            
+            # 解码当前生成的文本
+            current_text = self.tokenizer.decode(generated_tokens)
+            current_text = current_text.replace('</w>', ' ').replace('  ', ' ').strip()
+            
+            # Yield当前状态
+            yield {
+                "token_id": token_id,
+                "text": current_text,
+                "probability": probability,
+                "tokens_generated": len(generated_tokens) - len(start_tokens),
+                "is_complete": False
+            }
+        
+        # 发送完成信号
+        yield {
+            "token_id": None,
+            "text": current_text,
+            "probability": 0,
+            "tokens_generated": len(generated_tokens) - len(start_tokens),
+            "is_complete": True
         }

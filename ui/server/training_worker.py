@@ -113,15 +113,17 @@ class TrainingWorker:
             env["PYTHONUNBUFFERED"] = "1"
             env["PYTHONIOENCODING"] = "utf-8"
 
-            # 启动子进程
+            # 启动子进程 - 关键修复：指定encoding='utf-8'避免Windows GBK解码错误
             self.proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 cwd=repo_root,
                 env=env,
-                universal_newlines=True,
-                bufsize=1,
+                universal_newlines=True,  # 启用文本模式
+                encoding='utf-8',         # 显式指定UTF-8编码
+                errors='replace',         # 遇到无法解码的字符用?替换
+                bufsize=1,                # 行缓冲
             )
 
             epoch_re = re.compile(r"Epoch\s*(?:[:#])?\s*(\d+)[^\d]+(\d+)")

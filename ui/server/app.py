@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from model_manager import ModelManager
@@ -228,7 +228,7 @@ async def load_model(model_path: str = "../../checkpoints/shannon_b1.pt"):
 @app.post("/api/generate")
 async def generate(request: GenerateRequest):
     """
-    根据给定提示生成文本内容
+    根据给定提示生成文本内容（非流式）
     
     Args:
         request: 包含生成参数的GenerateRequest对象
@@ -254,6 +254,83 @@ async def generate(request: GenerateRequest):
         return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate/stream")
+async def generate_stream(request: GenerateRequest):
+    """
+    流式生成文本内容（SSE）
+    
+    Args:
+        request: 包含生成参数的GenerateRequest对象
+        
+    Returns:
+        StreamingResponse: SSE流式响应
+        
+    Raises:
+        HTTPException: 当没有加载模型或生成过程出现错误时抛出异常
+    """
+    if not model_manager.is_loaded():
+        raise HTTPException(status_code=400, detail="No model loaded. Please load a model first.")
+    
+    async def event_generator():
+        """生成SSE事件流 - 使用异步生成器确保实时推送"""
+        import asyncio
+        import sys
+        import time
+        
+        try:
+            # 获取同步生成器
+            sync_generator = model_manager.generate_stream(
+                prompt=request.prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_k=request.top_k,
+                top_p=request.top_p,
+                repetition_penalty=request.repetition_penalty
+            )
+            
+            # 逐个yield数据，每次yield后让出控制权
+            for chunk in sync_generator:
+                # 格式化为SSE格式
+                data_line = f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                
+                # Yield数据给客户端
+                yield data_line
+                
+                # 强制刷新stdout（用于调试）
+                sys.stdout.flush()
+                
+                # 如果是最后一个chunk，发送完成信号
+                if chunk.get("is_complete", False):
+                    yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
+                    break
+                    
+                # 关键修复：添加微小的异步延迟，确保事件循环有机会推送数据
+                # 这防止了Python生成器一次性执行完所有迭代
+                await asyncio.sleep(0)
+                
+        except Exception as e:
+            import traceback
+            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            print(f"[ERROR] Stream generation failed: {error_msg}")
+            error_chunk = {
+                "type": "error",
+                "error": str(e)
+            }
+            yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用nginx缓冲
+            "Transfer-Encoding": "chunked",  # 使用分块传输编码
+            "Access-Control-Allow-Origin": "*"  # CORS支持
+        }
+    )
 
 
 @app.post("/api/train/start")

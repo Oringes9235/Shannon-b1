@@ -97,19 +97,20 @@ class CausalMask(nn.Module):
             max_seq_len (int): 最大序列长度，默认为512
         """
         super().__init__()
+        self.max_seq_len = max_seq_len
         self.register_buffer("mask", self._create_mask(max_seq_len))
     
-    def _create_mask(self, max_seq_len):
+    def _create_mask(self, seq_len):
         """
         创建因果掩码矩阵
 
         Args:
-            max_seq_len (int): 序列长度
+            seq_len (int): 序列长度
 
         Returns:
             掩码矩阵，上三角部分为负无穷，其余为0
         """
-        mask = torch.triu(torch.ones(max_seq_len, max_seq_len), diagonal=1)
+        mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1)
         mask = mask.masked_fill(mask == 1, float('-inf'))
         return mask
     
@@ -123,6 +124,15 @@ class CausalMask(nn.Module):
         Returns:
             大小为(seq_len, seq_len)的因果掩码
         """
+        # 如果请求的序列长度超过当前掩码大小，动态扩展
+        if seq_len > self.mask.size(0):
+            # 计算新的掩码大小（向上取整到2的幂次，避免频繁扩展）
+            import math
+            new_size = max(seq_len, int(2 ** math.ceil(math.log2(seq_len))))
+            new_mask = self._create_mask(new_size).to(device=self.mask.device, dtype=self.mask.dtype)
+            self.max_seq_len = new_size
+            self.register_buffer("mask", new_mask)
+        
         return self.mask[:seq_len, :seq_len]
 
 

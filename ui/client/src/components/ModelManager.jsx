@@ -11,9 +11,12 @@ import axios from 'axios'
  * @returns {JSX.Element} 模型管理界面组件
  */
 const ModelManager = ({ apiUrl, status }) => {
+  // 从localStorage读取保存的模型路径，如果没有则使用默认值
+  const savedModelPath = localStorage.getItem('shannon_model_path') || '../../checkpoints/shannon_b1.pt'
+  
   // 初始化组件状态：检查点列表、模型路径、加载状态和消息提示
   const [checkpoints, setCheckpoints] = useState([])
-  const [modelPath, setModelPath] = useState('../../checkpoints/shannon_b1.pt')
+  const [modelPath, setModelPath] = useState(savedModelPath)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -21,6 +24,11 @@ const ModelManager = ({ apiUrl, status }) => {
   useEffect(() => {
     fetchCheckpoints()
   }, [])
+
+  // 当modelPath变化时，保存到localStorage
+  useEffect(() => {
+    localStorage.setItem('shannon_model_path', modelPath)
+  }, [modelPath])
 
   /**
    * 获取可用的模型检查点列表
