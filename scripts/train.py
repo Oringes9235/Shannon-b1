@@ -78,11 +78,30 @@ def main():
     print(f"Grad Accum: {args.grad_accum}")
     print("=" * 70)
     
+    # 显示详细的CUDA环境信息（如果可用）
     if args.device == 'cuda':
-        print(f"GPU: {torch.cuda.get_device_name(0)}")
-        print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        try:
+            from src.utils import get_cuda_info
+            cuda_info = get_cuda_info()
+            
+            print(f"\n🔧 CUDA Environment:")
+            print(f"   CUDA Version: {cuda_info['cuda_version']}")
+            print(f"   cuDNN Version: {cuda_info['cudnn_version']}")
+            print(f"   Device Count: {cuda_info['device_count']}")
+            
+            for device in cuda_info['devices']:
+                print(f"\n   GPU {device['index']}:")
+                print(f"      Name: {device['name']}")
+                print(f"      Compute Capability: {device['compute_capability']}")
+                print(f"      Total Memory: {device['memory_total'] / 1024**3:.2f} GB")
+                
+            print()
+        except Exception as e:
+            print(f"⚠️ Could not retrieve detailed CUDA info: {e}")
+            print(f"GPU: {torch.cuda.get_device_name(0)}")
+            print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB\n")
     
-    print("\n📚 Loading data...")
+    print("📚 Loading data...")
     text = load_shakespeare()
     tokenizer = create_tokenizer(text, args.tokenizer, args.vocab_size)
     

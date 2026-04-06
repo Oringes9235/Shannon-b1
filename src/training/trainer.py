@@ -62,17 +62,23 @@ class ImprovedTrainer:
         # 损失函数（若使用 label smoothing，将使用自定义计算）
         self.criterion = None
         
-        # 混合精度训练
+        # 混合精度训练 - 跨CUDA版本兼容
         self.use_amp = config.use_amp and self.device == 'cuda'
-        # GradScaler 初始化兼容不同 PyTorch 版本
+        self.scaler = None
+        
         if self.use_amp:
             try:
+                # PyTorch >= 1.10: GradScaler支持device_type参数
                 self.scaler = amp.GradScaler(device_type='cuda')
             except TypeError:
-                # 较旧/不同版本可能不接受 device_type 参数
-                self.scaler = amp.GradScaler()
-        else:
-            self.scaler = None
+                try:
+                    # 较旧版本：GradScaler不接受device_type参数
+                    self.scaler = amp.GradScaler()
+                except Exception as e:
+                    print(f"⚠️ Failed to initialize GradScaler: {e}")
+                    print("   Disabling mixed precision training")
+                    self.use_amp = False
+                    self.scaler = None
 
         # 梯度累积
         self.grad_accum_steps = config.gradient_accumulation_steps
@@ -110,13 +116,26 @@ class ImprovedTrainer:
             from contextlib import nullcontext
             return nullcontext()
 
+        # 确定设备类型
+        device_type = 'cuda' if self.device == 'cuda' else 'cpu'
+        
         try:
-            # try no-arg autocast (newer versions)
-            return amp.autocast()
-        except TypeError:
-            # fall back to specifying device_type
-            device_type = 'cuda' if self.device == 'cuda' else 'cpu'
+            # PyTorch >= 1.10: 使用device_type参数（推荐方式）
             return amp.autocast(device_type=device_type)
+        except TypeError:
+            try:
+                # 更旧的版本：尝试不带参数
+                return amp.autocast()
+            except TypeError:
+                try:
+                    # 非常旧的版本：使用torch.cuda.amp.autocast
+                    from torch.cuda.amp import autocast as cuda_autocast
+                    return cuda_autocast()
+                except Exception as e:
+                    print(f"⚠️ Failed to create autocast context: {e}")
+                    print("   Falling back to no autocast")
+                    from contextlib import nullcontext
+                    return nullcontext()
     
     def train_epoch(self) -> float:
         """
@@ -206,8 +225,14 @@ class ImprovedTrainer:
             inputs = inputs.to(self.device)
             targets = targets.to(self.device)
             
-            logits = self.model(inputs)
-            loss = self._compute_loss(logits, targets)
+            # 验证时也使用autocast以保持一致性
+            if self.use_amp:
+                with self._autocast():
+                    logits = self.model(inputs)
+                    loss = self._compute_loss(logits, targets)
+            else:
+                logits = self.model(inputs)
+                loss = self._compute_loss(logits, targets)
             
             total_loss += loss.item()
             num_batches += 1

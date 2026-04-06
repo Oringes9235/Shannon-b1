@@ -29,6 +29,47 @@ def set_seed(seed: int = 42):
         pass
 
 
+def get_cuda_info() -> dict:
+    """
+    获取CUDA环境详细信息，用于诊断和日志记录
+    
+    Returns:
+        dict: 包含CUDA版本、驱动版本、设备信息等字典
+    """
+    info = {
+        'cuda_available': False,
+        'cuda_version': None,
+        'cudnn_version': None,
+        'device_count': 0,
+        'devices': []
+    }
+    
+    try:
+        if not torch.cuda.is_available():
+            return info
+        
+        info['cuda_available'] = True
+        info['cuda_version'] = torch.version.cuda
+        info['cudnn_version'] = torch.backends.cudnn.version()
+        info['device_count'] = torch.cuda.device_count()
+        
+        for i in range(info['device_count']):
+            device_info = {
+                'index': i,
+                'name': torch.cuda.get_device_name(i),
+                'memory_total': torch.cuda.get_device_properties(i).total_memory,
+                'memory_allocated': torch.cuda.memory_allocated(i),
+                'memory_reserved': torch.cuda.memory_reserved(i),
+                'compute_capability': torch.cuda.get_device_capability(i)
+            }
+            info['devices'].append(device_info)
+            
+    except Exception as e:
+        print(f"⚠️ Error getting CUDA info: {e}")
+    
+    return info
+
+
 def get_device() -> str:
     """
     获取当前可用的计算设备

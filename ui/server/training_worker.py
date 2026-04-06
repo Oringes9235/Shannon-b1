@@ -114,6 +114,10 @@ class TrainingWorker:
             env = os.environ.copy()
             env["PYTHONUNBUFFERED"] = "1"
             env["PYTHONIOENCODING"] = "utf-8"
+            
+            # CUDA兼容性设置：允许PyTorch自动选择最佳的CUDA配置
+            # 这对不同CUDA版本的兼容性很重要
+            env["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
             # 启动子进程 - 关键修复：指定encoding='utf-8'避免Windows GBK解码错误
             self.proc = subprocess.Popen(
