@@ -1,7 +1,19 @@
 {
     "files.associations": {
         "*.py": "python",
-        "*.sh": "shellscript"
+        "*.sh": "shellscript",
+        "*.json": "json",
+        "*.jsx": "javascriptreact",
+        "*.css": "css",
+        "*.html": "html",
+        "*.js": "javascript",
+        "*.bat": "bat",
+        "*.txt": "plaintext",
+        "*.md": "markdown",
+        "*.ts": "typescript",
+        "*.tsx": "typescriptreact",
+        "*.yaml": "yaml",
+        
         
     }
 }

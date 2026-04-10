@@ -6,11 +6,11 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 import math
-from typing import Optional, List, Generator, Tuple
+from typing import Optional, List, Generator, Tuple, Dict
 
 from .config import ModelConfig
-from .layers import PositionalEncoding, CausalMask
-from .layers import RMSNorm
+from .layers import PositionalEncoding, CausalMask, RMSNorm
+from .layers import TransformerDecoderLayerWithCache
 
 
 class ShannonB1(nn.Module):
@@ -44,15 +44,14 @@ class ShannonB1(nn.Module):
             config.d_model, config.max_seq_len, config.dropout
         )
         
-        # Transformer Decoder 层（按层构建以便更灵活）
+        # Transformer Decoder 层（使用支持KV Cache的版本）
         self.decoder_layers = nn.ModuleList([
-            nn.TransformerDecoderLayer(
+            TransformerDecoderLayerWithCache(
                 d_model=config.d_model,
-                nhead=config.num_heads,
+                num_heads=config.num_heads,
                 dim_feedforward=config.d_ff,
                 dropout=config.dropout,
                 activation='gelu',
-                batch_first=True
             )
             for _ in range(config.num_layers)
         ])
@@ -85,37 +84,58 @@ class ShannonB1(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
     
-    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, 
+        tokens: torch.Tensor, 
+        past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None
+    ) -> Tuple[torch.Tensor, Optional[List[Tuple[torch.Tensor, torch.Tensor]]]]:
         """
         前向传播
         
         Args:
             tokens: (batch, seq_len) 输入 token IDs
+            past_key_values: 可选的KV缓存列表，每层一个(K, V)元组
         
         Returns:
             logits: (batch, seq_len, vocab_size)
+            present_key_values: 新的KV缓存（如果启用）
         """
         batch, seq_len = tokens.shape
         
         # 词嵌入 + 缩放
         x = self.token_embedding(tokens) * math.sqrt(self.config.d_model)
         
-        # 位置编码
-        x = self.pos_encoding(x)
+        # 如果有past_key_values，说明是增量解码，只需要对新token做位置编码
+        if past_key_values is not None and len(past_key_values) > 0:
+            # 获取已缓存的长度
+            past_length = past_key_values[0][0].size(-2)
+            # 只对新增的token做位置编码
+            x = self.pos_encoding(x, start_pos=past_length)
+        else:
+            # 正常的全量位置编码
+            x = self.pos_encoding(x)
 
         # 因果掩码
         mask = self.causal_mask(seq_len)
 
-        # 逐层应用 Transformer Decoder 层，可选地使用 checkpoint 节省内存
-        for layer in self.decoder_layers:
-            if self.use_checkpointing and self.training:
-                # 为 checkpoint 包装函数，closure 捕获 layer 与 mask
-                def run_layer(tgt, memory, layer=layer, mask=mask):
-                    return layer(tgt, memory, tgt_mask=mask)
-
-                x = checkpoint.checkpoint(run_layer, x, x, use_reentrant=False)
-            else:
-                x = layer(x, x, tgt_mask=mask)
+        # 逐层应用 Transformer Decoder 层
+        new_past_key_values = [] if past_key_values is not None else None
+        
+        for layer_idx, layer in enumerate(self.decoder_layers):
+            # 获取当前层的past_key_value
+            layer_past = past_key_values[layer_idx] if past_key_values is not None else None
+            
+            # 前向传播
+            x, present_kv = layer(
+                tgt=x,
+                memory=x,
+                tgt_mask=mask,
+                past_key_value=layer_past,
+            )
+            
+            # 保存当前层的KV缓存
+            if new_past_key_values is not None:
+                new_past_key_values.append(present_kv)
         
         # LayerNorm
         x = self.ln_f(x)
@@ -123,7 +143,7 @@ class ShannonB1(nn.Module):
         # 输出投影
         logits = self.output(x)
         
-        return logits
+        return logits, new_past_key_values
     
     def generate(
         self, 
@@ -139,9 +159,10 @@ class ShannonB1(nn.Module):
         ngram_block_size: int = 3,
         best_of: int = 1,
         max_repetition: Optional[int] = None,
+        use_kv_cache: bool = True,
     ) -> List[int]:
         """
-        自回归生成文本
+        自回归生成文本（支持KV Cache优化）
         
         Args:
             start_tokens: 起始 token 序列
@@ -156,6 +177,7 @@ class ShannonB1(nn.Module):
             ngram_block_size: N-gram 阻断大小
             best_of: 生成多少个样本后选择最优
             max_repetition: 最大重复次数限制
+            use_kv_cache: 是否使用KV缓存加速推理
         
         Returns:
             生成的 token 序列
@@ -171,10 +193,20 @@ class ShannonB1(nn.Module):
             # track seen ngrams of various sizes
             seen_ngrams = set()
             token_counts = defaultdict(int)
+            
+            # KV Cache初始化
+            past_key_values = None
 
-            for _ in range(max_new_tokens):
-                # 前向传播
-                logits = self.forward(cur_tokens)
+            for step in range(max_new_tokens):
+                # 前向传播（使用KV Cache）
+                if use_kv_cache and step > 0:
+                    # 只处理最后一个token
+                    input_tokens = cur_tokens[:, -1:]
+                    logits, new_past_key_values = self.forward(input_tokens, past_key_values=past_key_values)
+                    past_key_values = new_past_key_values
+                else:
+                    # 第一次需要处理整个序列并初始化KV Cache
+                    logits, past_key_values = self.forward(cur_tokens)
 
                 # 获取最后一个位置
                 last_logits = logits[0, -1, :].float()
@@ -386,9 +418,10 @@ class ShannonB1(nn.Module):
         ban_immediate_repeat: bool = True,
         ngram_block_size: int = 3,
         max_repetition: Optional[int] = None,
+        use_kv_cache: bool = True,
     ) -> Generator[Tuple[int, float], None, None]:
         """
-        流式生成文本，逐个token yield
+        流式生成文本，逐个token yield（支持KV Cache优化）
         
         Args:
             start_tokens: 起始 token 序列
@@ -402,6 +435,7 @@ class ShannonB1(nn.Module):
             ban_immediate_repeat: 是否禁止立即重复
             ngram_block_size: N-gram 阻断大小
             max_repetition: 最大重复次数限制
+            use_kv_cache: 是否使用KV缓存加速推理
         
         Yields:
             Tuple[int, float]: (token_id, probability)
@@ -414,10 +448,20 @@ class ShannonB1(nn.Module):
         seen_ngrams = set()
         token_counts = Counter(start_tokens)
         
+        # KV Cache初始化
+        past_key_values = None
+        
         for step in range(max_new_tokens):
-            # 前向传播
+            # 前向传播（使用KV Cache）
             with torch.no_grad():
-                logits = self.forward(cur_tokens)
+                if use_kv_cache and step > 0:
+                    # 只处理最后一个token
+                    input_tokens = cur_tokens[:, -1:]
+                    logits, new_past_key_values = self.forward(input_tokens, past_key_values=past_key_values)
+                    past_key_values = new_past_key_values
+                else:
+                    # 第一次需要处理整个序列并初始化KV Cache
+                    logits, past_key_values = self.forward(cur_tokens)
             
             # 获取最后一个位置的logits
             last_logits = logits[0, -1, :].float()
