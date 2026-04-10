@@ -74,75 +74,85 @@ const Dashboard = ({ apiUrl, status }) => {
   return (
     <div className="space-y-6">
       {/* 状态卡片区域 - 显示模型、训练、API和设备状态 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 sm:p-5 border border-gray-700 shadow-lg hover:border-blue-500/50 transition-all group">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">模型状态</p>
-              <p className="text-2xl font-semibold mt-1">
+              <p className="text-gray-400 text-xs sm:text-sm group-hover:text-blue-400 transition-colors">模型状态</p>
+              <p className={`text-xl sm:text-2xl font-bold mt-1 sm:mt-2 ${status.model_loaded ? 'text-green-400' : 'text-red-400'}`}>
                 {status.model_loaded ? '✅ 已加载' : '❌ 未加载'}
               </p>
             </div>
-            <div className="text-3xl">🤖</div>
+            <div className="text-3xl sm:text-4xl opacity-80 group-hover:opacity-100 transition-opacity">🤖</div>
           </div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 sm:p-5 border border-gray-700 shadow-lg hover:border-green-500/50 transition-all group">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">训练状态</p>
-              <p className="text-2xl font-semibold mt-1">
+              <p className="text-gray-400 text-xs sm:text-sm group-hover:text-green-400 transition-colors">训练状态</p>
+              <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2 text-yellow-400">
                 {status.training_active ? '🏃 运行中' : '⏸️ 空闲'}
               </p>
             </div>
-            <div className="text-3xl">📊</div>
+            <div className="text-3xl sm:text-4xl opacity-80 group-hover:opacity-100 transition-opacity">📊</div>
           </div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 sm:p-5 border border-gray-700 shadow-lg hover:border-purple-500/50 transition-all group">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">API 状态</p>
-              <p className="text-2xl font-semibold mt-1">🟢 在线</p>
+              <p className="text-gray-400 text-xs sm:text-sm group-hover:text-purple-400 transition-colors">API 状态</p>
+              <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2 text-green-400">🟢 在线</p>
             </div>
-            <div className="text-3xl">🌐</div>
+            <div className="text-3xl sm:text-4xl opacity-80 group-hover:opacity-100 transition-opacity">🌐</div>
           </div>
         </div>
-        <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 sm:p-5 border border-gray-700 shadow-lg hover:border-orange-500/50 transition-all group">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-400 text-sm">设备</p>
-              <p className="text-2xl font-semibold mt-1">{status.model_info?.device || 'CPU'}</p>
+              <p className="text-gray-400 text-xs sm:text-sm group-hover:text-orange-400 transition-colors">设备</p>
+              <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2 text-white">{status.model_info?.device || 'CPU'}</p>
             </div>
-            <div className="text-3xl">💻</div>
+            <div className="text-3xl sm:text-4xl opacity-80 group-hover:opacity-100 transition-opacity">💻</div>
           </div>
         </div>
       </div>
 
       {/* 系统资源使用情况可视化区域 */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h2 className="text-xl font-semibold mb-4">📊 系统资源</h2>
+      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 sm:p-6 border border-gray-700 shadow-lg">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent flex items-center gap-2">
+          <span className="text-2xl sm:text-3xl">📊</span>
+          <span className="hidden xs:inline">系统资源监控</span>
+          <span className="xs:hidden">资源监控</span>
+        </h2>
         
         {chartData.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            <p className="text-lg">⚠️ 系统监控功能未启用</p>
-            <p className="text-sm mt-2">后端需要提供 /api/system/stats 接口才能显示实时数据</p>
-            <p className="text-xs mt-1">当前仅显示模型和训练状态信息</p>
+          <div className="text-center py-8 sm:py-12">
+            <div className="text-5xl sm:text-6xl mb-3 sm:mb-4 opacity-50">⚠️</div>
+            <p className="text-base sm:text-lg text-gray-400 font-medium">系统监控功能未启用</p>
+            <p className="text-xs sm:text-sm text-gray-500 mt-2 px-4">后端需要提供 /api/system/stats 接口才能显示实时数据</p>
+            <p className="text-xs text-gray-600 mt-1">当前仅显示模型和训练状态信息</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {chartData.map((item) => (
-              <div key={item.name}>
-                <div className="flex justify-between text-sm text-gray-400 mb-1">
-                  <span>{item.name} 使用率</span>
-                  <span>{formatValue(item.value)}</span>
+              <div key={item.name} className="group">
+                <div className="flex justify-between text-xs sm:text-sm text-gray-400 mb-2 group-hover:text-gray-300 transition-colors">
+                  <span className="font-medium">{item.name} 使用率</span>
+                  <span className="font-mono" style={{ color: item.color }}>{formatValue(item.value)}</span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-gray-700/50 rounded-full h-2.5 sm:h-3 overflow-hidden">
                   <div
-                    className="h-2 rounded-full transition-all duration-300"
+                    className="h-2.5 sm:h-3 rounded-full transition-all duration-500 ease-out relative"
                     style={{ 
                       width: item.value !== null ? `${item.value}%` : '0%',
                       backgroundColor: item.color 
                     }}
-                  ></div>
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -152,24 +162,28 @@ const Dashboard = ({ apiUrl, status }) => {
 
       {/* 模型详细信息展示区域 - 仅在模型已加载时显示 */}
       {status.model_loaded && (
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <h2 className="text-xl font-semibold mb-4">🤖 模型详情</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div className="bg-gray-700 rounded-lg p-3">
-              <span className="text-gray-400">参数量</span>
-              <p className="text-lg font-semibold">{status.model_info?.parameters?.toLocaleString() || '-'}</p>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 sm:p-6 border border-gray-700 shadow-lg">
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent flex items-center gap-2">
+            <span className="text-2xl sm:text-3xl">🤖</span>
+            <span className="hidden xs:inline">模型详情</span>
+            <span className="xs:hidden">模型信息</span>
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4 border border-gray-600/50 hover:border-blue-500/50 transition-all">
+              <span className="text-xs text-gray-400 block mb-1 sm:mb-2">参数量</span>
+              <p className="text-lg sm:text-2xl font-bold text-blue-400 font-mono">{status.model_info?.parameters?.toLocaleString() || '-'}</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-3">
-              <span className="text-gray-400">模型大小</span>
-              <p className="text-lg font-semibold">{status.model_info?.size_mb?.toFixed(2) || '-'} MB</p>
+            <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4 border border-gray-600/50 hover:border-green-500/50 transition-all">
+              <span className="text-xs text-gray-400 block mb-1 sm:mb-2">模型大小</span>
+              <p className="text-lg sm:text-2xl font-bold text-green-400 font-mono">{status.model_info?.size_mb?.toFixed(2) || '-'} MB</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-3">
-              <span className="text-gray-400">词表大小</span>
-              <p className="text-lg font-semibold">{status.model_info?.vocab_size || '-'}</p>
+            <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4 border border-gray-600/50 hover:border-purple-500/50 transition-all">
+              <span className="text-xs text-gray-400 block mb-1 sm:mb-2">词表大小</span>
+              <p className="text-lg sm:text-2xl font-bold text-purple-400 font-mono">{status.model_info?.vocab_size || '-'}</p>
             </div>
-            <div className="bg-gray-700 rounded-lg p-3">
-              <span className="text-gray-400">层数</span>
-              <p className="text-lg font-semibold">{status.model_info?.num_layers || '-'}</p>
+            <div className="bg-gray-700/30 rounded-xl p-3 sm:p-4 border border-gray-600/50 hover:border-orange-500/50 transition-all">
+              <span className="text-xs text-gray-400 block mb-1 sm:mb-2">层数</span>
+              <p className="text-lg sm:text-2xl font-bold text-orange-400 font-mono">{status.model_info?.num_layers || '-'}</p>
             </div>
           </div>
         </div>

@@ -68,9 +68,9 @@ def load_model(model_path: str, device: str = 'cpu'):
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='流式文本生成')
-    parser.add_argument('--model-path', type=str, required=True, help='模型文件路径')
+    parser.add_argument('--model-path', '--checkpoint', type=str, required=True, help='模型文件路径')
     parser.add_argument('--prompt', type=str, default="The ", help='提示词')
-    parser.add_argument('--max-tokens', type=int, default=100, help='最大生成token数')
+    parser.add_argument('--max-tokens', '--max-new-tokens', type=int, default=100, help='最大生成token数')
     parser.add_argument('--temperature', type=float, default=0.8, help='温度参数')
     parser.add_argument('--top-k', type=int, default=50, help='Top-K采样参数')
     parser.add_argument('--top-p', type=float, default=None, help='Top-P采样参数')

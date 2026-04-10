@@ -411,8 +411,18 @@ async def list_checkpoints():
         list: 按修改时间排序的检查点信息列表
     """
     import glob
+    
+    # 获取项目根目录（server 目录的上两级）
+    server_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(server_dir))
+    checkpoints_dir = os.path.join(project_root, "checkpoints")
+    
+    # 如果检查点目录不存在，返回空列表
+    if not os.path.exists(checkpoints_dir):
+        return []
+    
     checkpoints = []
-    for path in glob.glob("checkpoints/*.pt"):
+    for path in glob.glob(os.path.join(checkpoints_dir, "*.pt")):
         name = os.path.basename(path)
         size = os.path.getsize(path) / 1024 / 1024
         mtime = os.path.getmtime(path)
@@ -422,6 +432,8 @@ async def list_checkpoints():
             "size_mb": round(size, 2),
             "modified": datetime.fromtimestamp(mtime).isoformat()
         })
+    
+    # 按修改时间倒序排序（最新的在前）
     return sorted(checkpoints, key=lambda x: x["modified"], reverse=True)
 
 
