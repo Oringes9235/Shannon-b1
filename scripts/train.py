@@ -51,6 +51,12 @@ def parse_args():
     parser.add_argument('--tie-embeddings', action='store_true', help='Tie token embedding and output projection')
     parser.add_argument('--patience', type=int, default=10)
     
+    # 长上下文支持
+    parser.add_argument('--use-rope', action='store_true', help='Enable RoPE (Rotary Positional Embeddings)')
+    parser.add_argument('--rope-base', type=float, default=10000.0, help='RoPE base frequency (10000 for <8K, 100000 for 8K-64K, 1000000+ for >64K)')
+    parser.add_argument('--sliding-window-size', type=int, default=None, help='Sliding window size for long sequences (e.g., 4096, 8192)')
+    parser.add_argument('--use-alibi', action='store_true', help='Enable ALiBi (not recommended with RoPE)')
+    
     # 分词器参数
     parser.add_argument('--tokenizer', type=str, default='char', choices=['char', 'bpe'])
     parser.add_argument('--vocab-size', type=int, default=2000)
@@ -138,6 +144,11 @@ def main():
         tie_word_embeddings=args.tie_embeddings,
         gradient_checkpointing=args.gradient_checkpointing,
         norm_type=args.norm_type,
+        # 长上下文支持
+        use_rope=args.use_rope,
+        rope_base=args.rope_base,
+        sliding_window_size=args.sliding_window_size,
+        use_alibi=args.use_alibi,
     )
     
     print("\n🏗️ Creating model...")

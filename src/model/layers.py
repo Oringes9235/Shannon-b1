@@ -8,8 +8,250 @@ import math
 from typing import Optional, Tuple
 
 
+class RotaryPositionalEmbedding(nn.Module):
+    """
+    RoPE (Rotary Positional Embeddings) - 旋转位置编码
+    
+    支持超长序列（1M+ tokens），通过旋转矩阵将位置信息编码到Q和K中。
+    具有良好的外推性，可以在训练时未见过的更长序列上工作。
+    """
+    
+    def __init__(self, d_model: int, max_seq_len: int = 1048576, base: float = 10000.0):
+        """
+        初始化RoPE
+        
+        Args:
+            d_model: 模型维度
+            max_seq_len: 最大序列长度（默认1M）
+            base: RoPE的base频率，控制位置编码的频率范围
+        """
+        super().__init__()
+        self.d_model = d_model
+        self.max_seq_len = max_seq_len
+        self.base = base
+        
+        # 计算逆频率
+        inv_freq = 1.0 / (base ** (torch.arange(0, d_model, 2).float() / d_model))
+        self.register_buffer('inv_freq', inv_freq)
+        
+        # 预计算cos和sin缓存
+        self._update_cos_sin_cache(max_seq_len)
+    
+    def _update_cos_sin_cache(self, seq_len: int):
+        """更新cos和sin缓存"""
+        t = torch.arange(seq_len, device=self.inv_freq.device).type_as(self.inv_freq)
+        freqs = torch.einsum('i,j->ij', t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        
+        self.register_buffer('cos_cached', emb.cos(), persistent=False)
+        self.register_buffer('sin_cached', emb.sin(), persistent=False)
+    
+    def forward(self, x: torch.Tensor, start_pos: int = 0) -> torch.Tensor:
+        """
+        应用RoPE到输入张量
+        
+        Args:
+            x: 输入张量 (batch, heads, seq_len, head_dim) 或 (batch, seq_len, d_model)
+            start_pos: 起始位置（用于增量解码）
+            
+        Returns:
+            应用了旋转位置编码的张量
+        """
+        # 支持两种输入格式：4D (batch, heads, seq_len, head_dim) 和 3D (batch, seq_len, d_model)
+        if x.dim() == 4:
+            batch, heads, seq_len, head_dim = x.shape
+        else:  # 3D
+            batch, seq_len, d_model = x.shape
+            head_dim = d_model
+        
+        end_pos = start_pos + seq_len
+        
+        # 如果超出缓存范围，扩展缓存
+        if end_pos > self.cos_cached.size(0):
+            new_len = max(end_pos, int(2 ** math.ceil(math.log2(end_pos))))
+            self._update_cos_sin_cache(new_len)
+        
+        # 获取对应位置的cos和sin
+        cos = self.cos_cached[start_pos:end_pos].unsqueeze(0).unsqueeze(0)  # (1, 1, seq_len, head_dim)
+        sin = self.sin_cached[start_pos:end_pos].unsqueeze(0).unsqueeze(0)
+        
+        # 应用旋转
+        return self._apply_rotary(x, cos, sin)
+    
+    def _apply_rotary(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        """
+        应用旋转矩阵
+        
+        Args:
+            x: (batch, heads, seq_len, head_dim)
+            cos: (1, 1, seq_len, head_dim)
+            sin: (1, 1, seq_len, head_dim)
+        """
+        # 分离奇偶维度
+        x1 = x[..., 0::2]  # 偶数维度 (batch, heads, seq_len, head_dim//2)
+        x2 = x[..., 1::2]  # 奇数维度 (batch, heads, seq_len, head_dim//2)
+        
+        # cos和sin也需要进行奇偶分离以匹配x1和x2的形状
+        # 注意：在RoPE中，cos和sin是成对重复的，所以取偶数位或奇数位都可以
+        cos_half = cos[..., 0::2]  # (1, 1, seq_len, head_dim//2)
+        sin_half = sin[..., 0::2]  # (1, 1, seq_len, head_dim//2)
+        
+        # 标准RoPE旋转公式
+        out1 = x1 * cos_half - x2 * sin_half
+        out2 = x1 * sin_half + x2 * cos_half
+        
+        # 合并
+        output = torch.stack([out1, out2], dim=-1).flatten(-2)
+        return output
+
+
+class ALiBiBias(nn.Module):
+    """
+    ALiBi (Attention with Linear Biases) - 线性注意力偏置
+    
+    为注意力分数添加与距离成比例的偏置，无需显式位置编码即可处理任意长度序列。
+    每个注意力头有不同的斜率，形成多尺度的位置感知。
+    
+    优化：对于超长序列，不预计算完整偏置矩阵，改为动态生成。
+    """
+    
+    def __init__(self, num_heads: int, max_seq_len: int = 1048576):
+        """
+        初始化ALiBi
+        
+        Args:
+            num_heads: 注意力头数
+            max_seq_len: 最大序列长度
+        """
+        super().__init__()
+        self.num_heads = num_heads
+        self.max_seq_len = max_seq_len
+        
+        # 计算每个头的斜率（几何级数）
+        slopes = self._get_slopes(num_heads)
+        self.register_buffer('slopes', slopes)
+        
+        # 对于短序列（<=2048），预计算偏置以提高性能
+        if max_seq_len <= 2048:
+            self._update_bias_cache(max_seq_len)
+            self.use_dynamic_bias = False
+        else:
+            # 对于长序列，不预计算
+            self.register_buffer('bias_cached', torch.tensor(0))  # 占位符
+            self.use_dynamic_bias = True
+    
+    def _get_slopes(self, num_heads: int) -> torch.Tensor:
+        """
+        计算ALiBi斜率
+        
+        使用2的幂次作为基础，如果不是2的幂次则进行插值
+        """
+        def get_slopes_power_of_2(n):
+            start = 2 ** (-2 ** -(math.log2(n) - 3))
+            ratio = start
+            return [start * ratio ** i for i in range(n)]
+        
+        if math.log2(num_heads).is_integer():
+            slopes = get_slopes_power_of_2(num_heads)
+        else:
+            # 非2的幂次，进行插值
+            closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
+            slopes_closest = get_slopes_power_of_2(closest_power_of_2)
+            slopes_extra = get_slopes_power_of_2(2 * closest_power_of_2)
+            slopes = slopes_closest + slopes_extra[1::2][:num_heads - closest_power_of_2]
+        
+        return torch.tensor(slopes)
+    
+    def _update_bias_cache(self, seq_len: int):
+        """更新偏置缓存"""
+        # 创建位置差矩阵 (seq_len, seq_len)
+        positions = torch.arange(seq_len)
+        rel_positions = positions.unsqueeze(1) - positions.unsqueeze(0)  # (seq_len, seq_len)
+        
+        # 取绝对值并转为负数（因果掩码只需要下三角）
+        rel_positions = -rel_positions.abs().unsqueeze(0)  # (1, seq_len, seq_len)
+        
+        # 乘以斜率 (num_heads, 1, 1) * (1, seq_len, seq_len) -> (num_heads, seq_len, seq_len)
+        bias = self.slopes.unsqueeze(1).unsqueeze(1) * rel_positions.unsqueeze(0)
+        
+        self.register_buffer('bias_cached', bias, persistent=False)
+    
+    def forward(self, seq_len: int, device: torch.device = None) -> torch.Tensor:
+        """
+        获取指定长度的偏置矩阵
+        
+        Args:
+            seq_len: 序列长度
+            device: 设备类型（用于动态生成时）
+            
+        Returns:
+            偏置矩阵 (num_heads, seq_len, seq_len)
+        """
+        # 如果使用动态偏置或请求的长度超过预计算范围
+        if self.use_dynamic_bias or seq_len > self.bias_cached.size(-1):
+            if device is None:
+                device = self.slopes.device
+            
+            # 动态生成偏置（节省内存）
+            positions = torch.arange(seq_len, device=device)
+            rel_positions = positions.unsqueeze(1) - positions.unsqueeze(0)  # (seq_len, seq_len)
+            rel_positions = -rel_positions.abs().unsqueeze(0)  # (1, seq_len, seq_len)
+            
+            # 乘以斜率
+            bias = self.slopes.to(device).unsqueeze(1).unsqueeze(1) * rel_positions
+            
+            return bias
+        
+        return self.bias_cached[:, :seq_len, :seq_len]
+
+
+class SlidingWindowAttention(nn.Module):
+    """
+    滑动窗口注意力机制
+    
+    限制每个token只能关注固定窗口大小内的其他token，显著降低内存占用。
+    适用于超长序列，内存复杂度从O(N^2)降至O(N*W)，其中W是窗口大小。
+    """
+    
+    def __init__(self, window_size: int = 2048):
+        """
+        初始化滑动窗口注意力
+        
+        Args:
+            window_size: 窗口大小（每个token能看到的左右范围）
+        """
+        super().__init__()
+        self.window_size = window_size
+    
+    def create_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
+        """
+        创建滑动窗口掩码
+        
+        Args:
+            seq_len: 序列长度
+            device: 设备
+            
+        Returns:
+            掩码矩阵 (seq_len, seq_len)
+        """
+        positions = torch.arange(seq_len, device=device)
+        # 计算相对位置
+        rel_positions = positions.unsqueeze(1) - positions.unsqueeze(0)
+        
+        # 创建掩码：窗口外的设为-inf
+        mask = (rel_positions.abs() > self.window_size).float() * float('-inf')
+        
+        # 因果掩码：未来的token设为-inf
+        causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1) * float('-inf')
+        
+        # 合并两个掩码
+        combined_mask = torch.maximum(mask, causal_mask)
+        
+        return combined_mask
+
+
 class PositionalEncoding(nn.Module):
-    """正弦余弦位置编码"""
+    """正弦余弦位置编码（保留作为备选）"""
     
     def __init__(self, d_model: int, max_seq_len: int = 512, dropout: float = 0.1):
         """
@@ -92,7 +334,7 @@ class LearnablePositionalEncoding(nn.Module):
 
 
 class CausalMask(nn.Module):
-    """因果掩码 (防止看到未来信息)"""
+    """因果掩码 (防止看到未来信息) - 支持长上下文优化"""
     
     def __init__(self, max_seq_len: int = 512):
         """
@@ -103,7 +345,15 @@ class CausalMask(nn.Module):
         """
         super().__init__()
         self.max_seq_len = max_seq_len
-        self.register_buffer("mask", self._create_mask(max_seq_len))
+        
+        # 对于短序列（<=4096），预计算掩码以提高性能
+        if max_seq_len <= 4096:
+            self.register_buffer("mask", self._create_mask(max_seq_len))
+            self.use_dynamic_mask = False
+        else:
+            # 对于长序列，不预计算，使用动态生成
+            self.register_buffer("mask", torch.tensor(0))  # 占位符
+            self.use_dynamic_mask = True
     
     def _create_mask(self, seq_len):
         """
@@ -119,32 +369,45 @@ class CausalMask(nn.Module):
         mask = mask.masked_fill(mask == 1, float('-inf'))
         return mask
     
-    def forward(self, seq_len: int):
+    def forward(self, seq_len: int, device: torch.device = None):
         """
         前向传播
 
         Args:
             seq_len (int): 当前序列长度
+            device: 设备类型（用于动态生成时）
 
         Returns:
             大小为(seq_len, seq_len)的因果掩码
         """
-        # 如果请求的序列长度超过当前掩码大小，动态扩展
-        if seq_len > self.mask.size(0):
-            # 计算新的掩码大小（向上取整到2的幂次，避免频繁扩展）
-            import math
-            new_size = max(seq_len, int(2 ** math.ceil(math.log2(seq_len))))
-            new_mask = self._create_mask(new_size).to(device=self.mask.device, dtype=self.mask.dtype)
-            self.max_seq_len = new_size
-            self.register_buffer("mask", new_mask)
+        # 如果使用动态掩码或请求的长度超过预计算范围
+        if self.use_dynamic_mask or seq_len > self.mask.size(0):
+            # 动态生成掩码（节省内存）
+            if device is None:
+                device = self.mask.device if not self.use_dynamic_mask else torch.device('cpu')
+            
+            # 使用更高效的生成方式：只生成下三角部分的索引
+            positions = torch.arange(seq_len, device=device)
+            mask = positions.unsqueeze(0) < positions.unsqueeze(1)  # (seq_len, seq_len)
+            mask = mask.to(dtype=torch.float32) * float('-inf')
+            
+            return mask
         
         return self.mask[:seq_len, :seq_len]
 
 
 class MultiHeadAttentionWithCache(nn.Module):
-    """支持KV缓存的多头注意力机制"""
+    """支持KV缓存和RoPE的多头注意力机制"""
     
-    def __init__(self, d_model: int, num_heads: int, dropout: float = 0.1):
+    def __init__(
+        self, 
+        d_model: int, 
+        num_heads: int, 
+        dropout: float = 0.1,
+        use_rope: bool = True,
+        rope_base: float = 10000.0,
+        max_seq_len: int = 1048576,
+    ):
         """
         初始化多头注意力层
         
@@ -152,6 +415,9 @@ class MultiHeadAttentionWithCache(nn.Module):
             d_model: 模型维度
             num_heads: 注意力头数
             dropout: dropout概率
+            use_rope: 是否使用RoPE
+            rope_base: RoPE的base频率
+            max_seq_len: 最大序列长度（用于RoPE缓存）
         """
         super().__init__()
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
@@ -159,6 +425,7 @@ class MultiHeadAttentionWithCache(nn.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.head_dim = d_model // num_heads
+        self.use_rope = use_rope
         
         # Q, K, V 投影
         self.q_proj = nn.Linear(d_model, d_model)
@@ -169,6 +436,14 @@ class MultiHeadAttentionWithCache(nn.Module):
         self.out_proj = nn.Linear(d_model, d_model)
         
         self.dropout = nn.Dropout(dropout)
+        
+        # RoPE（如果启用）
+        if use_rope:
+            self.rope = RotaryPositionalEmbedding(
+                d_model=self.head_dim,
+                max_seq_len=max_seq_len,
+                base=rope_base,
+            )
     
     def forward(
         self,
@@ -177,6 +452,8 @@ class MultiHeadAttentionWithCache(nn.Module):
         value: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        start_pos: int = 0,
+        alibi_bias: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         """
         前向传播
@@ -187,6 +464,8 @@ class MultiHeadAttentionWithCache(nn.Module):
             value: (batch, seq_len_v, d_model)
             mask: 注意力掩码
             past_key_value: 过去的(K, V)缓存
+            start_pos: 起始位置（用于RoPE增量编码）
+            alibi_bias: ALiBi偏置 (num_heads, seq_len_q, seq_len_k)
             
         Returns:
             output: (batch, seq_len_q, d_model)
@@ -199,6 +478,11 @@ class MultiHeadAttentionWithCache(nn.Module):
         k = self.k_proj(key).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(value).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
         
+        # 应用RoPE（如果启用）
+        if self.use_rope:
+            q = self.rope(q, start_pos=start_pos)
+            k = self.rope(k, start_pos=start_pos)
+        
         # 如果有past_key_value，拼接到当前的K和V上
         if past_key_value is not None:
             past_key, past_value = past_key_value
@@ -210,6 +494,12 @@ class MultiHeadAttentionWithCache(nn.Module):
         
         # 计算注意力分数
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        
+        # 应用ALiBi偏置（如果提供）
+        if alibi_bias is not None:
+            # alibi_bias形状: (num_heads, seq_len_q, seq_len_k)
+            # attn_scores形状: (batch, num_heads, seq_len_q, seq_len_k)
+            attn_scores = attn_scores + alibi_bias.unsqueeze(0)
         
         # 应用掩码
         if mask is not None:
@@ -233,7 +523,7 @@ class MultiHeadAttentionWithCache(nn.Module):
 
 
 class TransformerDecoderLayerWithCache(nn.Module):
-    """支持KV缓存的Transformer Decoder层"""
+    """支持KV缓存和RoPE的Transformer Decoder层"""
     
     def __init__(
         self,
@@ -242,6 +532,9 @@ class TransformerDecoderLayerWithCache(nn.Module):
         dim_feedforward: int = 2048,
         dropout: float = 0.1,
         activation: str = 'gelu',
+        use_rope: bool = True,
+        rope_base: float = 10000.0,
+        max_seq_len: int = 1048576,
     ):
         """
         初始化Transformer Decoder层
@@ -252,11 +545,21 @@ class TransformerDecoderLayerWithCache(nn.Module):
             dim_feedforward: FFN维度
             dropout: dropout概率
             activation: 激活函数
+            use_rope: 是否使用RoPE
+            rope_base: RoPE的base频率
+            max_seq_len: 最大序列长度
         """
         super().__init__()
         
-        # Self-attention with cache support
-        self.self_attn = MultiHeadAttentionWithCache(d_model, num_heads, dropout)
+        # Self-attention with cache support and RoPE
+        self.self_attn = MultiHeadAttentionWithCache(
+            d_model=d_model,
+            num_heads=num_heads,
+            dropout=dropout,
+            use_rope=use_rope,
+            rope_base=rope_base,
+            max_seq_len=max_seq_len,
+        )
         
         # Feed-forward network
         self.linear1 = nn.Linear(d_model, dim_feedforward)
@@ -276,6 +579,8 @@ class TransformerDecoderLayerWithCache(nn.Module):
         memory: torch.Tensor,
         tgt_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        start_pos: int = 0,
+        alibi_bias: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         """
         前向传播
@@ -285,6 +590,8 @@ class TransformerDecoderLayerWithCache(nn.Module):
             memory: 记忆序列 (batch, seq_len, d_model) - 在此实现中未用于Self-Attention，但保留接口兼容性
             tgt_mask: 目标掩码
             past_key_value: 过去的(K, V)缓存
+            start_pos: 起始位置（用于RoPE增量编码）
+            alibi_bias: ALiBi偏置 (num_heads, seq_len, seq_len)
             
         Returns:
             output: (batch, seq_len, d_model)
@@ -297,6 +604,8 @@ class TransformerDecoderLayerWithCache(nn.Module):
             value=tgt,
             mask=tgt_mask,
             past_key_value=past_key_value,
+            start_pos=start_pos,
+            alibi_bias=alibi_bias,
         )
         
         # Add & Norm

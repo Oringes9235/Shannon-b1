@@ -159,14 +159,18 @@ class ImprovedTrainer:
             # 前向传播并计算损失（支持 label smoothing）
             if self.use_amp:
                 with self._autocast():
-                    logits = self.model(inputs)
+                    outputs = self.model(inputs)
+                    # 模型返回 (logits, past_key_values)，训练时只需要logits
+                    logits = outputs[0] if isinstance(outputs, tuple) else outputs
                     loss = self._compute_loss(logits, targets)
                     loss = loss / self.grad_accum_steps
 
                 # 反向传播 (混合精度)
                 self.scaler.scale(loss).backward()
             else:
-                logits = self.model(inputs)
+                outputs = self.model(inputs)
+                # 模型返回 (logits, past_key_values)，训练时只需要logits
+                logits = outputs[0] if isinstance(outputs, tuple) else outputs
                 loss = self._compute_loss(logits, targets)
                 loss = loss / self.grad_accum_steps
                 loss.backward()
@@ -228,10 +232,14 @@ class ImprovedTrainer:
             # 验证时也使用autocast以保持一致性
             if self.use_amp:
                 with self._autocast():
-                    logits = self.model(inputs)
+                    outputs = self.model(inputs)
+                    # 模型返回 (logits, past_key_values)，验证时只需要logits
+                    logits = outputs[0] if isinstance(outputs, tuple) else outputs
                     loss = self._compute_loss(logits, targets)
             else:
-                logits = self.model(inputs)
+                outputs = self.model(inputs)
+                # 模型返回 (logits, past_key_values)，验证时只需要logits
+                logits = outputs[0] if isinstance(outputs, tuple) else outputs
                 loss = self._compute_loss(logits, targets)
             
             total_loss += loss.item()

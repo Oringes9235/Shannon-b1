@@ -22,6 +22,12 @@ class ModelConfig:
     max_seq_len: int = 512  # 最大序列长度
     dropout: float = 0.1  # Dropout概率
     
+    # 长上下文支持
+    use_rope: bool = True  # 是否使用RoPE（旋转位置编码）
+    rope_base: float = 10000.0  # RoPE的base频率
+    use_alibi: bool = False  # 是否使用ALiBi（线性注意力偏置）
+    sliding_window_size: Optional[int] = None  # 滑动窗口大小（None表示禁用）
+    
     # 训练配置
     batch_size: int = 32  # 批处理大小
     learning_rate: float = 0.001  # 学习率

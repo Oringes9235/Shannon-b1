@@ -9,7 +9,7 @@ import math
 from typing import Optional, List, Generator, Tuple, Dict
 
 from .config import ModelConfig
-from .layers import PositionalEncoding, CausalMask, RMSNorm
+from .layers import PositionalEncoding, CausalMask, RMSNorm, ALiBiBias, SlidingWindowAttention
 from .layers import TransformerDecoderLayerWithCache
 
 
@@ -39,12 +39,17 @@ class ShannonB1(nn.Module):
         # 词嵌入
         self.token_embedding = nn.Embedding(config.vocab_size, config.d_model)
         
-        # 位置编码
-        self.pos_encoding = PositionalEncoding(
-            config.d_model, config.max_seq_len, config.dropout
-        )
+        # 位置编码（根据配置选择）
+        if config.use_rope:
+            # 使用RoPE时，不在embedding后添加位置编码
+            self.pos_encoding = None
+        else:
+            # 传统正弦位置编码
+            self.pos_encoding = PositionalEncoding(
+                config.d_model, config.max_seq_len, config.dropout
+            )
         
-        # Transformer Decoder 层（使用支持KV Cache的版本）
+        # Transformer Decoder 层（使用支持KV Cache和RoPE的版本）
         self.decoder_layers = nn.ModuleList([
             TransformerDecoderLayerWithCache(
                 d_model=config.d_model,
@@ -52,6 +57,9 @@ class ShannonB1(nn.Module):
                 dim_feedforward=config.d_ff,
                 dropout=config.dropout,
                 activation='gelu',
+                use_rope=config.use_rope,
+                rope_base=config.rope_base,
+                max_seq_len=config.max_seq_len,
             )
             for _ in range(config.num_layers)
         ])
@@ -59,6 +67,23 @@ class ShannonB1(nn.Module):
         
         # 因果掩码
         self.causal_mask = CausalMask(config.max_seq_len)
+        
+        # ALiBi（如果启用）
+        if config.use_alibi:
+            self.alibi_bias = ALiBiBias(
+                num_heads=config.num_heads,
+                max_seq_len=config.max_seq_len,
+            )
+        else:
+            self.alibi_bias = None
+        
+        # 滑动窗口注意力（如果启用）
+        if config.sliding_window_size is not None:
+            self.sliding_window = SlidingWindowAttention(
+                window_size=config.sliding_window_size,
+            )
+        else:
+            self.sliding_window = None
         
         # 最终归一化（支持 RMSNorm）
         if getattr(config, 'norm_type', 'layernorm') == 'rmsnorm':
@@ -105,18 +130,29 @@ class ShannonB1(nn.Module):
         # 词嵌入 + 缩放
         x = self.token_embedding(tokens) * math.sqrt(self.config.d_model)
         
-        # 如果有past_key_values，说明是增量解码，只需要对新token做位置编码
-        if past_key_values is not None and len(past_key_values) > 0:
-            # 获取已缓存的长度
-            past_length = past_key_values[0][0].size(-2)
-            # 只对新增的token做位置编码
-            x = self.pos_encoding(x, start_pos=past_length)
-        else:
-            # 正常的全量位置编码
-            x = self.pos_encoding(x)
+        # 位置编码（如果不使用RoPE）
+        if not self.config.use_rope:
+            if past_key_values is not None and len(past_key_values) > 0:
+                # 增量解码
+                past_length = past_key_values[0][0].size(-2)
+                x = self.pos_encoding(x, start_pos=past_length)
+            else:
+                # 全量编码
+                x = self.pos_encoding(x)
 
-        # 因果掩码
-        mask = self.causal_mask(seq_len)
+        # 因果掩码（动态生成，传入设备信息）
+        mask = self.causal_mask(seq_len, device=tokens.device)
+        
+        # 滑动窗口掩码（如果启用）
+        if self.sliding_window is not None:
+            window_mask = self.sliding_window.create_mask(seq_len, tokens.device)
+            # 合并掩码：取两者中更严格的那个
+            mask = torch.minimum(mask, window_mask)
+
+        # ALiBi偏置（如果启用）
+        alibi_bias = None
+        if self.alibi_bias is not None:
+            alibi_bias = self.alibi_bias(seq_len, device=tokens.device)  # (num_heads, seq_len, seq_len)
 
         # 逐层应用 Transformer Decoder 层
         new_past_key_values = [] if past_key_values is not None else None
@@ -125,12 +161,19 @@ class ShannonB1(nn.Module):
             # 获取当前层的past_key_value
             layer_past = past_key_values[layer_idx] if past_key_values is not None else None
             
+            # 计算起始位置（用于RoPE）
+            start_pos = 0
+            if layer_past is not None:
+                start_pos = layer_past[0].size(-2)
+            
             # 前向传播
             x, present_kv = layer(
                 tgt=x,
                 memory=x,
                 tgt_mask=mask,
                 past_key_value=layer_past,
+                start_pos=start_pos,
+                alibi_bias=alibi_bias,  # 传递ALiBi偏置
             )
             
             # 保存当前层的KV缓存
