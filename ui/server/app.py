@@ -37,6 +37,7 @@ class GenerateRequest(BaseModel):
     定义了文本生成所需的各种参数配置
     """
     prompt: str
+    system_prompt: Optional[str] = None  # 系统提示词，可选
     max_tokens: int = 100
     temperature: float = 0.8
     top_k: int = 40
@@ -255,6 +256,7 @@ async def generate(request: GenerateRequest):
     try:
         result = model_manager.generate(
             prompt=request.prompt,
+            system_prompt=request.system_prompt,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
             top_k=request.top_k,
@@ -293,6 +295,7 @@ async def generate_stream(request: GenerateRequest):
             # 获取同步生成器
             sync_generator = model_manager.generate_stream(
                 prompt=request.prompt,
+                system_prompt=request.system_prompt,
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 top_k=request.top_k,

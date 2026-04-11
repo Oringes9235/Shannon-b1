@@ -191,11 +191,64 @@ def main():
 
     history = trainer.train(args.epochs)
     
-    trainer.save_checkpoint(args.save_path)
-    tokenizer.save(args.save_path.replace('.pt', '_tokenizer.json'))
+    # 生成带架构版本的checkpoint文件名
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    arch_version = _generate_arch_version_string(config)
     
-    print(f"\n💾 Saved: {args.save_path}")
+    # 构建新的保存路径
+    base_path = args.save_path.replace('.pt', '')
+    versioned_path = f"{base_path}_{arch_version}_{timestamp}.pt"
+    
+    # 保存模型和分词器
+    trainer.save_checkpoint(versioned_path)
+    tokenizer.save(versioned_path.replace('.pt', '_tokenizer.json'))
+    
+    print(f"\n💾 Saved: {versioned_path}")
+    print(f"📋 Architecture: {arch_version}")
+    
     return history
+
+
+def _generate_arch_version_string(config: ModelConfig) -> str:
+    """
+    根据模型配置生成架构版本字符串
+    
+    Args:
+        config: 模型配置对象
+        
+    Returns:
+        str: 架构版本字符串，格式如 "dm256_nl6_nh8_rope4096_rmsnorm"
+    """
+    parts = []
+    
+    # 核心架构参数
+    parts.append(f"dm{config.d_model}")  # d_model
+    parts.append(f"nl{config.num_layers}")  # num_layers
+    parts.append(f"nh{config.num_heads}")  # num_heads
+    
+    # 位置编码类型
+    if config.use_rope:
+        rope_base_short = int(config.rope_base) if config.rope_base == int(config.rope_base) else config.rope_base
+        parts.append(f"rope{int(rope_base_short)}")
+    elif config.use_alibi:
+        parts.append("alibi")
+    else:
+        parts.append("fixed")  # 固定正弦编码
+    
+    # 滑动窗口
+    if config.sliding_window_size:
+        parts.append(f"sw{config.sliding_window_size}")
+    
+    # 归一化类型
+    parts.append(config.norm_type.replace('norm', ''))  # layernorm->layer, rmsnorm->rms
+    
+    # 其他重要特性
+    if config.tie_word_embeddings:
+        parts.append("tie")
+    if config.gradient_checkpointing:
+        parts.append("ckpt")
+    
+    return "_".join(parts)
 
 
 if __name__ == "__main__":

@@ -112,13 +112,14 @@ class ModelManager:
             print(f"Failed to load model: {e}")
             return False
     
-    def generate(self, prompt: str, max_tokens: int = 100, temperature: float = 0.8,
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, max_tokens: int = 100, temperature: float = 0.8,
                  top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15) -> Dict[str, Any]:
         """
         生成文本
         
         Args:
             prompt (str): 提示文本
+            system_prompt (Optional[str]): 系统提示词，用于设定模型角色或行为准则，默认None
             max_tokens (int): 最大生成token数，默认100
             temperature (float): 温度参数，默认0.8
             top_k (int): Top-k采样参数，默认40
@@ -131,8 +132,14 @@ class ModelManager:
         if not self.model:
             raise ValueError("No model loaded")
         
+        # 构建完整的输入文本：system_prompt + prompt
+        full_prompt = prompt
+        if system_prompt and system_prompt.strip():
+            # 在用户提示词前添加系统提示词，用换行分隔
+            full_prompt = f"{system_prompt.strip()}\n\n{prompt}"
+        
         # 编码提示词
-        start_tokens = self.tokenizer.encode(prompt)[:50]
+        start_tokens = self.tokenizer.encode(full_prompt)[:50]
         
         # 生成
         with torch.no_grad():
@@ -156,13 +163,14 @@ class ModelManager:
             "temperature": temperature
         }
     
-    def generate_stream(self, prompt: str, max_tokens: int = 100, temperature: float = 0.8,
+    def generate_stream(self, prompt: str, system_prompt: Optional[str] = None, max_tokens: int = 100, temperature: float = 0.8,
                        top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15) -> Generator[Dict[str, Any], None, None]:
         """
         流式生成文本
         
         Args:
             prompt (str): 提示文本
+            system_prompt (Optional[str]): 系统提示词，用于设定模型角色或行为准则，默认None
             max_tokens (int): 最大生成token数，默认100
             temperature (float): 温度参数，默认0.8
             top_k (int): Top-k采样参数，默认40
@@ -175,8 +183,14 @@ class ModelManager:
         if not self.model:
             raise ValueError("No model loaded")
         
+        # 构建完整的输入文本：system_prompt + prompt
+        full_prompt = prompt
+        if system_prompt and system_prompt.strip():
+            # 在用户提示词前添加系统提示词，用换行分隔
+            full_prompt = f"{system_prompt.strip()}\n\n{prompt}"
+        
         # 编码提示词
-        start_tokens = self.tokenizer.encode(prompt)[:50]
+        start_tokens = self.tokenizer.encode(full_prompt)[:50]
         
         # 流式生成
         generated_tokens = list(start_tokens)

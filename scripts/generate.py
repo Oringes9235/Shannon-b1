@@ -70,6 +70,7 @@ def main():
     parser = argparse.ArgumentParser(description='流式文本生成')
     parser.add_argument('--model-path', '--checkpoint', type=str, required=True, help='模型文件路径')
     parser.add_argument('--prompt', type=str, default="The ", help='提示词')
+    parser.add_argument('--system-prompt', type=str, default=None, help='系统提示词（可选），用于设定模型角色或行为准则')
     parser.add_argument('--max-tokens', '--max-new-tokens', type=int, default=100, help='最大生成token数')
     parser.add_argument('--temperature', type=float, default=0.8, help='温度参数')
     parser.add_argument('--top-k', type=int, default=50, help='Top-K采样参数')
@@ -86,11 +87,22 @@ def main():
     print(f"✅ 模型加载完成: vocab={config.vocab_size}, d_model={config.d_model}")
     print(f"📝 分词器类型: {'BPE' if hasattr(tokenizer, 'merges') else 'Char'}")
     print(f"\n{'='*60}")
-    print(f"💬 Prompt: {args.prompt}")
+    
+    # 显示系统提示词（如果有）
+    if args.system_prompt:
+        print(f"🤖 System Prompt: {args.system_prompt}")
+        print(f"{'-'*60}")
+    
+    print(f"💬 User Prompt: {args.prompt}")
     print(f"{'='*60}\n")
     
+    # 构建完整提示词
+    full_prompt = args.prompt
+    if args.system_prompt and args.system_prompt.strip():
+        full_prompt = f"{args.system_prompt.strip()}\n\n{args.prompt}"
+    
     # 编码提示词
-    start_tokens = tokenizer.encode(args.prompt)[:50]
+    start_tokens = tokenizer.encode(full_prompt)[:50]
     
     # 流式生成
     print("🚀 开始流式生成:\n")

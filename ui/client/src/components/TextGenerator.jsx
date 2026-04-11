@@ -11,6 +11,7 @@ import axios from 'axios'
 const TextGenerator = ({ apiUrl, status }) => {
   // 从localStorage读取保存的参数设置
   const savedPrompt = localStorage.getItem('shannon_prompt') || 'The '
+  const savedSystemPrompt = localStorage.getItem('shannon_system_prompt') || ''
   const savedMaxTokens = parseInt(localStorage.getItem('shannon_max_tokens')) || 100
   const savedTemperature = parseFloat(localStorage.getItem('shannon_temperature')) || 0.85
   const savedTopK = parseInt(localStorage.getItem('shannon_top_k')) || 40
@@ -19,6 +20,7 @@ const TextGenerator = ({ apiUrl, status }) => {
   
   // 初始化文本生成相关状态变量
   const [prompt, setPrompt] = useState(savedPrompt) // 提示词输入
+  const [systemPrompt, setSystemPrompt] = useState(savedSystemPrompt) // 系统提示词输入
   const [maxTokens, setMaxTokens] = useState(savedMaxTokens) // 最大token数
   const [temperature, setTemperature] = useState(savedTemperature) // 温度参数，控制随机性
   const [topK, setTopK] = useState(savedTopK) // Top-K采样参数
@@ -35,6 +37,10 @@ const TextGenerator = ({ apiUrl, status }) => {
   useEffect(() => {
     localStorage.setItem('shannon_prompt', prompt)
   }, [prompt])
+
+  useEffect(() => {
+    localStorage.setItem('shannon_system_prompt', systemPrompt)
+  }, [systemPrompt])
 
   useEffect(() => {
     localStorage.setItem('shannon_max_tokens', maxTokens.toString())
@@ -76,6 +82,7 @@ const TextGenerator = ({ apiUrl, status }) => {
     try {
       const res = await axios.post(`${apiUrl}/generate`, {
         prompt,
+        system_prompt: systemPrompt || undefined,
         max_tokens: maxTokens,
         temperature,
         top_k: topK,
@@ -132,6 +139,7 @@ const TextGenerator = ({ apiUrl, status }) => {
         },
         body: JSON.stringify({
           prompt,
+          system_prompt: systemPrompt || undefined,
           max_tokens: maxTokens,
           temperature,
           top_k: topK,
@@ -262,18 +270,40 @@ const TextGenerator = ({ apiUrl, status }) => {
         </div>
 
         {/* 输入区 */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-            <span>📝</span>
-            提示词 (Prompt)
-          </label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500 transition-all resize-none"
-            rows={4}
-            placeholder="输入你的创意提示词..."
-          />
+        <div className="mb-6 space-y-4">
+          {/* 系统提示词输入框 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+              <span>🤖</span>
+              系统提示词 (System Prompt)
+              <span className="text-xs text-gray-500 ml-1">(可选)</span>
+            </label>
+            <textarea
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500 transition-all resize-none"
+              rows={2}
+              placeholder="例如：你是一个专业的编程助手，请用简洁的语言回答问题..."
+            />
+            <p className="text-xs text-gray-500 mt-1.5 ml-1">
+              💡 用于设定模型角色或行为准则，会在用户提示词前自动添加
+            </p>
+          </div>
+
+          {/* 用户提示词输入框 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+              <span>📝</span>
+              用户提示词 (User Prompt)
+            </label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500 transition-all resize-none"
+              rows={4}
+              placeholder="输入你的创意提示词..."
+            />
+          </div>
         </div>
 
         {/* 参数配置区 */}
