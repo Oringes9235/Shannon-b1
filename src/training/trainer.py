@@ -381,6 +381,25 @@ class ImprovedTrainer:
         
         return self.history
     
+    @staticmethod
+    def _is_lora_checkpoint(state_dict: Dict[str, Any]) -> bool:
+        """检测 checkpoint 是否为 LoRA 格式"""
+        for k in state_dict.keys():
+            if 'lora_A' in k or 'lora_B' in k or '.linear.weight' in k:
+                return True
+        return False
+
+    @staticmethod
+    def _remap_lora_to_standard(state_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """将 LoRA 格式 state_dict 重映射为标准 nn.Linear 格式"""
+        new_state = {}
+        for key, value in state_dict.items():
+            if 'lora_A' in key or 'lora_B' in key:
+                continue
+            new_key = key.replace('.linear.weight', '.weight').replace('.linear.bias', '.bias')
+            new_state[new_key] = value
+        return new_state
+
     def save_checkpoint(self, path: str):
         """
         保存检查点
@@ -389,6 +408,19 @@ class ImprovedTrainer:
             path: 检查点保存路径
         """
         os.makedirs(os.path.dirname(path), exist_ok=True)
+        # 如果使用了 LoRA，先合并权重到基础模型再保存，确保 checkpoint 使用标准 key 结构
+        use_lora = getattr(self.config, 'use_lora', False)
+        lora_replacements = []  # 记录替换的层以便恢复
+        if use_lora and hasattr(self.model, 'merge_lora_weights'):
+            self.model.merge_lora_weights()
+            # 将 LoRALinear 替换为普通 nn.Linear，使 state_dict 产出标准 key
+            from src.model.layers import LoRALinear
+            for layer in self.model.decoder_layers:
+                for target in self.config.lora_target_modules:
+                    attr = getattr(layer.self_attn, target, None)
+                    if isinstance(attr, LoRALinear):
+                        lora_replacements.append((layer.self_attn, target, attr))
+                        setattr(layer.self_attn, target, attr.linear)
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
@@ -401,6 +433,11 @@ class ImprovedTrainer:
             'global_step': self.global_step
         }
         torch.save(checkpoint, path)
+        # 保存完成后恢复 LoRA 结构（继续训练）
+        for parent, target, lora_obj in lora_replacements:
+            setattr(parent, target, lora_obj)
+        if use_lora and hasattr(self.model, 'unmerge_lora_weights'):
+            self.model.unmerge_lora_weights()
         print(f"   💾 Checkpoint saved: {path}")
     
     def load_checkpoint(self, path: str):
@@ -421,6 +458,12 @@ class ImprovedTrainer:
             print(f"⚠️ Failed to load checkpoint with weights_only=False: {e}")
             raise
         ckpt_state = checkpoint.get('model_state_dict', {})
+
+        # 检测并重映射旧格式 LoRA checkpoint 为标准 key 格式
+        if self._is_lora_checkpoint(ckpt_state):
+            from src.model.layers import LoRALinear
+            ckpt_state = self._remap_lora_to_standard(ckpt_state)
+            print("   [Info] Detected LoRA-format checkpoint, remapped to standard keys")
 
         # 尝试按形状安全地加载模型权重：仅替换形状匹配的参数
         model_state = self.model.state_dict()

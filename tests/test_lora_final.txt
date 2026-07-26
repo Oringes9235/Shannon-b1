@@ -1,0 +1,140 @@
+
+[96m════════════════════════════════════════════════════════════[0m
+[1m[97m  LoRA Test Suite - 2026-07-27 00:58:13[0m
+[96m════════════════════════════════════════════════════════════[0m
+
+[94m[INFO] Total tests: 29[0m
+[94m[INFO] Python: 3.12.4[0m
+[94m[INFO] PyTorch: 2.7.1+cu118[0m
+
+[96mTesting: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0.0% (0/29)[0m
+[93m▶ TestLoRALinear.test_creation[0m
+  [90m└─ 测试 LoRALinear 创建[0m
+  [92m✓ PASSED[0m [90m(0.002s)[0m
+[96mTesting: [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   3.4% (1/29)[0m
+[93m▶ TestLoRALinear.test_different_ranks[0m
+  [90m└─ 测试不同 rank 值[0m
+  [92m✓ PASSED[0m [90m(0.005s)[0m
+[96mTesting: [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   6.9% (2/29)[0m
+[93m▶ TestLoRALinear.test_dropout_in_training[0m
+  [90m└─ 测试 LoRA dropout 在训练模式下工作[0m
+  [92m✓ PASSED[0m [90m(0.005s)[0m
+[96mTesting: [████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  10.3% (3/29)[0m
+[93m▶ TestLoRALinear.test_forward_batch[0m
+  [90m└─ 测试前向传播支持任意 batch 维度[0m
+  [92m✓ PASSED[0m [90m(0.001s)[0m
+[96mTesting: [█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  13.8% (4/29)[0m
+[93m▶ TestLoRALinear.test_forward_different_from_base[0m
+  [90m└─ 测试 LoRA 输出与基础线性层不同（因为 lora_A 非零初始化）[0m
+  [92m✓ PASSED[0m [90m(0.000s)[0m
+[96mTesting: [██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  17.2% (5/29)[0m
+[93m▶ TestLoRALinear.test_forward_shape[0m
+  [90m└─ 测试前向传播输出形状[0m
+  [92m✓ PASSED[0m [90m(0.001s)[0m
+[96mTesting: [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  20.7% (6/29)[0m
+[93m▶ TestLoRALinear.test_lora_param_shapes[0m
+  [90m└─ 测试 LoRA 参数形状[0m
+  [92m✓ PASSED[0m [90m(0.000s)[0m
+[96mTesting: [█████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  24.1% (7/29)[0m
+[93m▶ TestLoRALinear.test_merge_unmerge_weights[0m
+  [90m└─ 测试权重合并与分离[0m
+  [92m✓ PASSED[0m [90m(0.001s)[0m
+[96mTesting: [███████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  27.6% (8/29)[0m
+[93m▶ TestShannonB1LoRA.test_apply_lora_all_modules[0m
+  [90m└─ 测试对所有 Q/K/V/Out projection 应用 LoRA[0m
+  [92m✓ PASSED[0m [90m(0.008s)[0m
+[96mTesting: [████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░]  31.0% (9/29)[0m
+[93m▶ TestShannonB1LoRA.test_apply_lora_custom_targets[0m
+  [90m└─ 测试自定义 LoRA 目标模块[0m
+  [92m✓ PASSED[0m [90m(0.005s)[0m
+[96mTesting: [█████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░]  34.5% (10/29)[0m
+[93m▶ TestShannonB1LoRA.test_apply_lora_default[0m
+  [90m└─ 测试默认 LoRA 应用（q_proj + v_proj）[0m
+  [92m✓ PASSED[0m [90m(0.005s)[0m
+[96mTesting: [███████████████░░░░░░░░░░░░░░░░░░░░░░░░░]  37.9% (11/29)[0m
+[93m▶ TestShannonB1LoRA.test_forward_after_lora[0m
+  [90m└─ 测试应用 LoRA 后前向传播正常[0m
+  [92m✓ PASSED[0m [90m(0.013s)[0m
+[96mTesting: [████████████████░░░░░░░░░░░░░░░░░░░░░░░░]  41.4% (12/29)[0m
+[93m▶ TestShannonB1LoRA.test_forward_with_kv_cache_after_lora[0m
+  [90m└─ 测试 LoRA 模型中 KV Cache 前向传播[0m
+  [92m✓ PASSED[0m [90m(0.011s)[0m
+[96mTesting: [█████████████████░░░░░░░░░░░░░░░░░░░░░░░]  44.8% (13/29)[0m
+[93m▶ TestShannonB1LoRA.test_frozen_base_weights[0m
+  [90m└─ 测试应用 LoRA 后基础权重被冻结[0m
+  [92m✓ PASSED[0m [90m(0.009s)[0m
+[96mTesting: [███████████████████░░░░░░░░░░░░░░░░░░░░░]  48.3% (14/29)[0m
+[93m▶ TestShannonB1LoRA.test_get_lora_state_dict[0m
+  [90m└─ 测试 get_lora_state_dict 返回正确的键[0m
+  [92m✓ PASSED[0m [90m(0.010s)[0m
+[96mTesting: [████████████████████░░░░░░░░░░░░░░░░░░░░]  51.7% (15/29)[0m
+[93m▶ TestShannonB1LoRA.test_get_lora_trainable_params[0m
+  [90m└─ 测试 get_lora_trainable_params 返回正确的参数列表[0m
+  [92m✓ PASSED[0m [90m(0.006s)[0m
+[96mTesting: [██████████████████████░░░░░░░░░░░░░░░░░░]  55.2% (16/29)[0m
+[93m▶ TestShannonB1LoRA.test_save_load_lora_weights[0m
+  [90m└─ 测试保存和加载 LoRA 权重[0m
+  [92m✓ PASSED[0m [90m(0.059s)[0m
+[96mTesting: [███████████████████████░░░░░░░░░░░░░░░░░]  58.6% (17/29)[0m
+[93m▶ TestShannonB1LoRA.test_trainable_param_count[0m
+  [90m└─ 测试可训练参数统计正确[0m
+  [92m✓ PASSED[0m [90m(0.005s)[0m
+[96mTesting: [████████████████████████░░░░░░░░░░░░░░░░]  62.1% (18/29)[0m
+[93m▶ TestLoRATrainingWorkflow.test_convert_back_for_training[0m
+  [90m└─ 测试合并后再分离继续训练[0m
+  [92m✓ PASSED[0m [90m(0.005s)[0m
+[96mTesting: [██████████████████████████░░░░░░░░░░░░░░]  65.5% (19/29)[0m
+[93m▶ TestLoRATrainingWorkflow.test_lora_training_loop[0m
+  [90m└─ 测试 LoRA 微调训练循环[0m
+  [92m✓ PASSED[0m [90m(2.575s)[0m
+[96mTesting: [███████████████████████████░░░░░░░░░░░░░]  69.0% (20/29)[0m
+[93m▶ TestLoRATrainingWorkflow.test_merge_for_inference[0m
+  [90m└─ 测试训练后合并权重进行推理[0m
+  [92m✓ PASSED[0m [90m(0.012s)[0m
+[96mTesting: [████████████████████████████░░░░░░░░░░░░]  72.4% (21/29)[0m
+[93m▶ TestLoRAEdgeCases.test_alpha_equal_rank[0m
+  [90m└─ 测试 alpha == rank 的情况[0m
+  [92m✓ PASSED[0m [90m(0.007s)[0m
+[96mTesting: [██████████████████████████████░░░░░░░░░░]  75.9% (22/29)[0m
+[93m▶ TestLoRAEdgeCases.test_empty_target_modules[0m
+  [90m└─ 测试空目标模块列表[0m
+  [92m✓ PASSED[0m [90m(0.010s)[0m
+[96mTesting: [███████████████████████████████░░░░░░░░░]  79.3% (23/29)[0m
+[93m▶ TestLoRAEdgeCases.test_generate_stream_with_lora[0m
+  [90m└─ 测试 LoRA 模型流式生成[0m
+  [92m✓ PASSED[0m [90m(0.019s)[0m
+[96mTesting: [█████████████████████████████████░░░░░░░]  82.8% (24/29)[0m
+[93m▶ TestLoRAEdgeCases.test_generate_with_lora[0m
+  [90m└─ 测试 LoRA 模型文本生成[0m
+  [92m✓ PASSED[0m [90m(0.020s)[0m
+[96mTesting: [██████████████████████████████████░░░░░░]  86.2% (25/29)[0m
+[93m▶ TestLoRAEdgeCases.test_high_dropout[0m
+  [90m└─ 测试高 dropout[0m
+  [92m✓ PASSED[0m [90m(0.012s)[0m
+[96mTesting: [███████████████████████████████████░░░░░]  89.7% (26/29)[0m
+[93m▶ TestLoRAEdgeCases.test_multiple_apply_calls[0m
+  [90m└─ 测试多次调用 apply_lora（幂等性）[0m
+  [92m✓ PASSED[0m [90m(0.009s)[0m
+[96mTesting: [█████████████████████████████████████░░░]  93.1% (27/29)[0m
+[93m▶ TestLoRAEdgeCases.test_rank_1[0m
+  [90m└─ 测试 rank=1 的极端情况[0m
+  [92m✓ PASSED[0m [90m(0.009s)[0m
+[96mTesting: [██████████████████████████████████████░░]  96.6% (28/29)[0m
+[93m▶ TestLoRAEdgeCases.test_zero_dropout[0m
+  [90m└─ 测试 dropout=0 的情况[0m
+  [92m✓ PASSED[0m [90m(0.009s)[0m
+----------------------------------------------------------------------
+Ran 29 tests in 2.836s
+
+OK
+
+[96m════════════════════════════════════════════════════════════[0m
+[1m[97m  Test Summary[0m
+[96m════════════════════════════════════════════════════════════[0m
+
+[92m✓ All 29 tests passed! 🎉[0m
+
+[94m[INFO] Total time: 0.009s[0m
+
+[92m[1m✓ ALL TESTS PASSED[0m
+

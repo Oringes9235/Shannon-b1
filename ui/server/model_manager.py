@@ -86,7 +86,14 @@ class ModelManager:
             
             # 创建模型
             self.model = ShannonB1(self.config).to(self.device)
-            self.model.load_state_dict(checkpoint['model_state_dict'])
+
+            # 加载模型权重，兼容旧格式 LoRA checkpoint
+            ckpt_state = checkpoint['model_state_dict']
+            if self._is_lora_checkpoint(ckpt_state):
+                ckpt_state = self._remap_lora_to_standard(ckpt_state)
+                print("[Info] Detected LoRA-format checkpoint, remapped to standard keys")
+
+            self.model.load_state_dict(ckpt_state)
             self.model.eval()
             
             # 加载分词器
@@ -264,6 +271,52 @@ class ModelManager:
             "is_complete": True,
             "conversation": conv_data,
         }
+
+    @staticmethod
+    def _is_lora_checkpoint(state_dict: Dict[str, Any]) -> bool:
+        """
+        检测 checkpoint 是否为 LoRA 格式（即 state_dict 中包含 lora_A/lora_B/linear.weight 等 key）。
+
+        Args:
+            state_dict: checkpoint 中的 model_state_dict
+
+        Returns:
+            如果是 LoRA 格式返回 True
+        """
+        # 检查是否存在 LoRA 特有 key 且不存在标准 key
+        sample_keys = list(state_dict.keys())
+        for k in sample_keys:
+            if 'lora_A' in k or 'lora_B' in k or '.linear.weight' in k:
+                return True
+        return False
+
+    @staticmethod
+    def _remap_lora_to_standard(state_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        将 LoRA 格式的 state_dict 重映射为标准 nn.Linear 格式。
+
+        LoRA 格式: decoder_layers.X.self_attn.{target}.linear.{weight,bias}
+        标准格式:  decoder_layers.X.self_attn.{target}.{weight,bias}
+
+        同时丢弃 lora_A、lora_B 等 LoRA 特有参数（因为已在保存前由 merge 步骤合并到 linear 中）。
+
+        Args:
+            state_dict: LoRA 格式的 state_dict
+
+        Returns:
+            标准格式的 state_dict
+        """
+        import re
+        new_state = {}
+        for key, value in state_dict.items():
+            # 跳过 LoRA 参数和元数据
+            if 'lora_A' in key or 'lora_B' in key:
+                continue
+            # 将 .linear.weight / .linear.bias 映射为标准 key
+            # 例如: decoder_layers.0.self_attn.q_proj.linear.weight -> decoder_layers.0.self_attn.q_proj.weight
+            new_key = key.replace('.linear.weight', '.weight').replace('.linear.bias', '.bias')
+            new_state[new_key] = value
+        return new_state
 
     @staticmethod
     def _extract_assistant_reply(full_text: str, input_prompt: str) -> str:
