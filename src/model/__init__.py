@@ -1,6 +1,6 @@
 from .shannon import ShannonB1, ShannonB1Encoder
 from .config import ModelConfig, TrainingConfig
-from .layers import PositionalEncoding, CausalMask, RMSNorm
+from .layers import PositionalEncoding, CausalMask, RMSNorm, LoRALinear
 
 # 定义模块导出接口列表，指定哪些类和函数可以被外部模块通过 from module import * 的方式导入
 __all__ = [
@@ -10,5 +10,6 @@ __all__ = [
     'TrainingConfig',
     'PositionalEncoding',
     'CausalMask',
-    'RMSNorm'
+    'RMSNorm',
+    'LoRALinear',
 ]

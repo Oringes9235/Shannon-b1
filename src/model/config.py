@@ -28,6 +28,13 @@ class ModelConfig:
     use_alibi: bool = False  # 是否使用ALiBi（线性注意力偏置）
     sliding_window_size: Optional[int] = None  # 滑动窗口大小（None表示禁用）
     
+    # LoRA 配置
+    use_lora: bool = False  # 是否使用 LoRA 微调
+    lora_rank: int = 8  # LoRA 低秩分解的秩
+    lora_alpha: float = 16.0  # LoRA 缩放因子
+    lora_dropout: float = 0.0  # LoRA dropout 概率
+    lora_target_modules: List[str] = field(default_factory=lambda: ["q_proj", "v_proj"])  # LoRA 目标模块（默认：Q 和 V 投影）
+    
     # 训练配置
     batch_size: int = 32  # 批处理大小
     learning_rate: float = 0.001  # 学习率

@@ -10,7 +10,7 @@ from typing import Optional, List, Generator, Tuple, Dict
 
 from .config import ModelConfig
 from .layers import PositionalEncoding, CausalMask, RMSNorm, ALiBiBias, SlidingWindowAttention
-from .layers import TransformerDecoderLayerWithCache
+from .layers import TransformerDecoderLayerWithCache, LoRALinear
 
 
 class ShannonB1(nn.Module):
@@ -109,6 +109,228 @@ class ShannonB1(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
     
+    # ==================== LoRA 相关方法 ====================
+    
+    def apply_lora(
+        self,
+        rank: int = 8,
+        alpha: float = 16.0,
+        dropout: float = 0.0,
+        target_modules: Optional[List[str]] = None,
+    ) -> None:
+        """
+        将 LoRA 适配器应用到模型的指定线性层上。
+
+        冻结原始模型参数，仅保留 LoRA 参数可训练。
+
+        Args:
+            rank: 低秩分解的秩
+            alpha: LoRA 缩放因子
+            dropout: LoRA dropout 概率
+            target_modules: 要应用 LoRA 的目标模块名称列表，
+                            可选值: "q_proj", "k_proj", "v_proj", "out_proj"
+                            默认: ["q_proj", "v_proj"]
+        """
+        if target_modules is None:
+            target_modules = ["q_proj", "v_proj"]
+
+        self.config.use_lora = True
+        self.config.lora_rank = rank
+        self.config.lora_alpha = alpha
+        self.config.lora_dropout = dropout
+        self.config.lora_target_modules = target_modules
+
+        # 冻结所有参数
+        for param in self.parameters():
+            param.requires_grad = False
+
+        # 保持 embedding 可训练（如果配置需要）
+        # self.token_embedding.weight.requires_grad = True  # 可选
+
+        for layer in self.decoder_layers:
+            for target in target_modules:
+                if target == "q_proj" and hasattr(layer.self_attn, "q_proj"):
+                    existing = layer.self_attn.q_proj
+                    if isinstance(existing, LoRALinear):
+                        existing = existing.linear  # 取出原始 nn.Linear
+                    layer.self_attn.q_proj = LoRALinear(
+                        existing,
+                        rank=rank,
+                        alpha=alpha,
+                        dropout=dropout,
+                    )
+                elif target == "k_proj" and hasattr(layer.self_attn, "k_proj"):
+                    existing = layer.self_attn.k_proj
+                    if isinstance(existing, LoRALinear):
+                        existing = existing.linear
+                    layer.self_attn.k_proj = LoRALinear(
+                        existing,
+                        rank=rank,
+                        alpha=alpha,
+                        dropout=dropout,
+                    )
+                elif target == "v_proj" and hasattr(layer.self_attn, "v_proj"):
+                    existing = layer.self_attn.v_proj
+                    if isinstance(existing, LoRALinear):
+                        existing = existing.linear
+                    layer.self_attn.v_proj = LoRALinear(
+                        existing,
+                        rank=rank,
+                        alpha=alpha,
+                        dropout=dropout,
+                    )
+                elif target == "out_proj" and hasattr(layer.self_attn, "out_proj"):
+                    existing = layer.self_attn.out_proj
+                    if isinstance(existing, LoRALinear):
+                        existing = existing.linear
+                    layer.self_attn.out_proj = LoRALinear(
+                        existing,
+                        rank=rank,
+                        alpha=alpha,
+                        dropout=dropout,
+                    )
+
+        # 统计可训练参数（静默，无日志输出）
+        lora_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in self.parameters())
+
+    def get_lora_state_dict(self) -> Dict[str, torch.Tensor]:
+        """
+        获取仅包含 LoRA 参数的状态字典（用于保存轻量级 LoRA 权重）。
+
+        Returns:
+            包含所有 LoRA 相关参数的状态字典
+        """
+        lora_state = {}
+        for layer_idx, layer in enumerate(self.decoder_layers):
+            for target in self.config.lora_target_modules:
+                if target == "q_proj" and isinstance(layer.self_attn.q_proj, LoRALinear):
+                    lora_mod = layer.self_attn.q_proj
+                    lora_state[f"layer_{layer_idx}_q_proj_lora_A"] = lora_mod.lora_A.data.clone()
+                    lora_state[f"layer_{layer_idx}_q_proj_lora_B"] = lora_mod.lora_B.data.clone()
+                elif target == "k_proj" and isinstance(layer.self_attn.k_proj, LoRALinear):
+                    lora_mod = layer.self_attn.k_proj
+                    lora_state[f"layer_{layer_idx}_k_proj_lora_A"] = lora_mod.lora_A.data.clone()
+                    lora_state[f"layer_{layer_idx}_k_proj_lora_B"] = lora_mod.lora_B.data.clone()
+                elif target == "v_proj" and isinstance(layer.self_attn.v_proj, LoRALinear):
+                    lora_mod = layer.self_attn.v_proj
+                    lora_state[f"layer_{layer_idx}_v_proj_lora_A"] = lora_mod.lora_A.data.clone()
+                    lora_state[f"layer_{layer_idx}_v_proj_lora_B"] = lora_mod.lora_B.data.clone()
+                elif target == "out_proj" and isinstance(layer.self_attn.out_proj, LoRALinear):
+                    lora_mod = layer.self_attn.out_proj
+                    lora_state[f"layer_{layer_idx}_out_proj_lora_A"] = lora_mod.lora_A.data.clone()
+                    lora_state[f"layer_{layer_idx}_out_proj_lora_B"] = lora_mod.lora_B.data.clone()
+        # 保存 LoRA 配置
+        lora_state["_lora_rank"] = torch.tensor(self.config.lora_rank)
+        lora_state["_lora_alpha"] = torch.tensor(self.config.lora_alpha)
+        lora_state["_lora_target_modules"] = "_".join(self.config.lora_target_modules)
+        return lora_state
+
+    def save_lora_weights(self, path: str) -> None:
+        """
+        保存 LoRA 权重到文件（仅保存 LoRA 适配器参数，轻量级）。
+
+        Args:
+            path: 保存路径（建议使用 .lora.pt 后缀）
+        """
+        import os
+        os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
+        lora_state = self.get_lora_state_dict()
+        torch.save(lora_state, path)
+
+    def load_lora_weights(self, path: str) -> None:
+        """
+        从文件加载 LoRA 权重。需要先调用 apply_lora() 应用 LoRA 结构。
+
+        Args:
+            path: LoRA 权重文件路径
+        """
+        # 尝试显式允许加载包含自定义类的完整检查点（非 weights-only）
+        try:
+            lora_state = torch.load(path, map_location="cpu", weights_only=False)
+        except TypeError:
+            # 兼容较旧的 PyTorch 版本
+            lora_state = torch.load(path, map_location="cpu")
+        except Exception as e:
+            print(f"[Warn] Failed to load LoRA weights: {e}")
+            raise
+
+        loaded = 0
+        for layer_idx, layer in enumerate(self.decoder_layers):
+            for target in self.config.lora_target_modules:
+                key_a = f"layer_{layer_idx}_{target}_lora_A"
+                key_b = f"layer_{layer_idx}_{target}_lora_B"
+                if key_a in lora_state and key_b in lora_state:
+                    if target == "q_proj" and isinstance(layer.self_attn.q_proj, LoRALinear):
+                        layer.self_attn.q_proj.lora_A.data = lora_state[key_a].to(
+                            layer.self_attn.q_proj.lora_A.device
+                        )
+                        layer.self_attn.q_proj.lora_B.data = lora_state[key_b].to(
+                            layer.self_attn.q_proj.lora_B.device
+                        )
+                        loaded += 1
+                    elif target == "k_proj" and isinstance(layer.self_attn.k_proj, LoRALinear):
+                        layer.self_attn.k_proj.lora_A.data = lora_state[key_a].to(
+                            layer.self_attn.k_proj.lora_A.device
+                        )
+                        layer.self_attn.k_proj.lora_B.data = lora_state[key_b].to(
+                            layer.self_attn.k_proj.lora_B.device
+                        )
+                        loaded += 1
+                    elif target == "v_proj" and isinstance(layer.self_attn.v_proj, LoRALinear):
+                        layer.self_attn.v_proj.lora_A.data = lora_state[key_a].to(
+                            layer.self_attn.v_proj.lora_A.device
+                        )
+                        layer.self_attn.v_proj.lora_B.data = lora_state[key_b].to(
+                            layer.self_attn.v_proj.lora_B.device
+                        )
+                        loaded += 1
+                    elif target == "out_proj" and isinstance(layer.self_attn.out_proj, LoRALinear):
+                        layer.self_attn.out_proj.lora_A.data = lora_state[key_a].to(
+                            layer.self_attn.out_proj.lora_A.device
+                        )
+                        layer.self_attn.out_proj.lora_B.data = lora_state[key_b].to(
+                            layer.self_attn.out_proj.lora_B.device
+                        )
+                        loaded += 1
+        _ = loaded  # suppress unused-variable warning
+
+    def merge_lora_weights(self) -> None:
+        """
+        将所有 LoRA 权重合并到基础模型的线性层中（用于推理加速）。
+        合并后模型不再包含 LoRA 参数，直接使用合并后的权重进行推理。
+        """
+        for layer in self.decoder_layers:
+            for target in self.config.lora_target_modules:
+                attr = getattr(layer.self_attn, target, None)
+                if isinstance(attr, LoRALinear):
+                    attr.merge_weights_to_base()
+        pass
+
+    def unmerge_lora_weights(self) -> None:
+        """
+        从基础模型中分离 LoRA 权重（用于继续训练）。
+        """
+        for layer in self.decoder_layers:
+            for target in self.config.lora_target_modules:
+                attr = getattr(layer.self_attn, target, None)
+                if isinstance(attr, LoRALinear):
+                    attr.unmerge_weights_from_base()
+        pass
+
+    def get_lora_trainable_params(self) -> List[nn.Parameter]:
+        """
+        获取所有 LoRA 可训练参数（用于优化器）。
+
+        Returns:
+            LoRA 可训练参数列表
+        """
+        lora_params = []
+        for name, param in self.named_parameters():
+            if param.requires_grad and "lora_" in name:
+                lora_params.append(param)
+        return lora_params
+
     def forward(
         self, 
         tokens: torch.Tensor, 
@@ -155,7 +377,7 @@ class ShannonB1(nn.Module):
             alibi_bias = self.alibi_bias(seq_len, device=tokens.device)  # (num_heads, seq_len, seq_len)
 
         # 逐层应用 Transformer Decoder 层
-        new_past_key_values = [] if past_key_values is not None else None
+        new_past_key_values = []
         
         for layer_idx, layer in enumerate(self.decoder_layers):
             # 获取当前层的past_key_value

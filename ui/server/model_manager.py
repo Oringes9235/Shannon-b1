@@ -8,7 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import torch
 import json
-from typing import Optional, Dict, Any, Generator
+from typing import Optional, Dict, Any, Generator, List
+from src.utils import Conversation, SIMPLE_TEMPLATE, get_template_by_name
 
 
 class ModelManager:
@@ -113,10 +114,12 @@ class ModelManager:
             return False
     
     def generate(self, prompt: str, system_prompt: Optional[str] = None, max_tokens: int = 100, temperature: float = 0.8,
-                 top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15) -> Dict[str, Any]:
+                 top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15,
+                 conversation: Optional[Conversation] = None,
+                 conv_template: str = "simple") -> Dict[str, Any]:
         """
-        生成文本
-        
+        生成文本（支持多轮对话）
+
         Args:
             prompt (str): 提示文本
             system_prompt (Optional[str]): 系统提示词，用于设定模型角色或行为准则，默认None
@@ -125,22 +128,28 @@ class ModelManager:
             top_k (int): Top-k采样参数，默认40
             top_p (float): Top-p采样参数，默认0.9
             repetition_penalty (float): 重复惩罚参数，默认1.15
-            
+            conversation (Optional[Conversation]): 多轮对话对象（传入则使用对话历史构建 prompt）
+            conv_template (str): 对话模板名称（仅在未传入 conversation 时生效）
+
         Returns:
             Dict[str, Any]: 包含生成结果的字典
         """
         if not self.model:
             raise ValueError("No model loaded")
-        
-        # 构建完整的输入文本：system_prompt + prompt
-        full_prompt = prompt
-        if system_prompt and system_prompt.strip():
-            # 在用户提示词前添加系统提示词，用换行分隔
-            full_prompt = f"{system_prompt.strip()}\n\n{prompt}"
-        
+
+        # 多轮对话模式
+        if conversation is not None:
+            conversation.add_user(prompt)
+            full_prompt = conversation.build_prompt()
+        else:
+            # 单轮模式：system_prompt + prompt
+            full_prompt = prompt
+            if system_prompt and system_prompt.strip():
+                full_prompt = f"{system_prompt.strip()}\n\n{prompt}"
+
         # 编码提示词
         start_tokens = self.tokenizer.encode(full_prompt)[:50]
-        
+
         # 生成
         with torch.no_grad():
             generated = self.model.generate(
@@ -151,23 +160,36 @@ class ModelManager:
                 top_p=top_p,
                 repetition_penalty=repetition_penalty
             )
-        
+
         # 解码
         text = self.tokenizer.decode(generated)
         text = text.replace('</w>', ' ').replace('  ', ' ').strip()
-        
-        return {
+
+        # 提取助手的回复部分（仅保留新生成的内容）
+        assistant_reply = self._extract_assistant_reply(text, full_prompt)
+
+        # 更新对话历史
+        if conversation is not None:
+            conversation.add_assistant(assistant_reply)
+
+        result = {
             "prompt": prompt,
             "generated_text": text,
+            "assistant_reply": assistant_reply,
             "tokens_generated": len(generated) - len(start_tokens),
-            "temperature": temperature
+            "temperature": temperature,
         }
-    
+        if conversation is not None:
+            result["conversation"] = conversation.to_dict()
+        return result
+
     def generate_stream(self, prompt: str, system_prompt: Optional[str] = None, max_tokens: int = 100, temperature: float = 0.8,
-                       top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15) -> Generator[Dict[str, Any], None, None]:
+                        top_k: int = 40, top_p: float = 0.9, repetition_penalty: float = 1.15,
+                        conversation: Optional[Conversation] = None,
+                        conv_template: str = "simple") -> Generator[Dict[str, Any], None, None]:
         """
-        流式生成文本
-        
+        流式生成文本（支持多轮对话）
+
         Args:
             prompt (str): 提示文本
             system_prompt (Optional[str]): 系统提示词，用于设定模型角色或行为准则，默认None
@@ -176,22 +198,28 @@ class ModelManager:
             top_k (int): Top-k采样参数，默认40
             top_p (float): Top-p采样参数，默认0.9
             repetition_penalty (float): 重复惩罚参数，默认1.15
-            
+            conversation (Optional[Conversation]): 多轮对话对象（传入则使用对话历史构建 prompt）
+            conv_template (str): 对话模板名称（仅在未传入 conversation 时生效）
+
         Yields:
             Dict[str, Any]: 包含生成片段的字典
         """
         if not self.model:
             raise ValueError("No model loaded")
-        
-        # 构建完整的输入文本：system_prompt + prompt
-        full_prompt = prompt
-        if system_prompt and system_prompt.strip():
-            # 在用户提示词前添加系统提示词，用换行分隔
-            full_prompt = f"{system_prompt.strip()}\n\n{prompt}"
-        
+
+        # 多轮对话模式
+        if conversation is not None:
+            conversation.add_user(prompt)
+            full_prompt = conversation.build_prompt()
+        else:
+            # 单轮模式：system_prompt + prompt
+            full_prompt = prompt
+            if system_prompt and system_prompt.strip():
+                full_prompt = f"{system_prompt.strip()}\n\n{prompt}"
+
         # 编码提示词
         start_tokens = self.tokenizer.encode(full_prompt)[:50]
-        
+
         # 流式生成
         generated_tokens = list(start_tokens)
         for token_id, probability in self.model.generate_stream(
@@ -203,11 +231,11 @@ class ModelManager:
             repetition_penalty=repetition_penalty
         ):
             generated_tokens.append(token_id)
-            
+
             # 解码当前生成的文本
             current_text = self.tokenizer.decode(generated_tokens)
             current_text = current_text.replace('</w>', ' ').replace('  ', ' ').strip()
-            
+
             # Yield当前状态
             yield {
                 "token_id": token_id,
@@ -216,12 +244,48 @@ class ModelManager:
                 "tokens_generated": len(generated_tokens) - len(start_tokens),
                 "is_complete": False
             }
-        
+
+        # 提取助手回复
+        assistant_reply = self._extract_assistant_reply(current_text, full_prompt)
+
+        # 更新对话历史
+        if conversation is not None:
+            conversation.add_assistant(assistant_reply)
+
+        conv_data = conversation.to_dict() if conversation is not None else None
+
         # 发送完成信号
         yield {
             "token_id": None,
             "text": current_text,
+            "assistant_reply": assistant_reply,
             "probability": 0,
             "tokens_generated": len(generated_tokens) - len(start_tokens),
-            "is_complete": True
+            "is_complete": True,
+            "conversation": conv_data,
         }
+
+    @staticmethod
+    def _extract_assistant_reply(full_text: str, input_prompt: str) -> str:
+        """
+        从完整输出中提取助手的回复部分。
+
+        简单策略：去除输入 prompt 对应的前缀，得到纯回复。
+        如果模板中有 [ASSISTANT] 等标记，也会尝试去除。
+
+        Returns:
+            助手的纯回复文本
+        """
+        # 去除输入 prompt 前缀
+        if full_text.startswith(input_prompt):
+            reply = full_text[len(input_prompt):].strip()
+        else:
+            reply = full_text.strip()
+
+        # 去除模板标记
+        markers = ["[ASSISTANT] ", "[ASSISTANT]", "<|im_start|>assistant\n", "assistant\n"]
+        for marker in markers:
+            if reply.startswith(marker):
+                reply = reply[len(marker):].strip()
+
+        return reply

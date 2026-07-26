@@ -57,6 +57,14 @@ def parse_args():
     parser.add_argument('--sliding-window-size', type=int, default=None, help='Sliding window size for long sequences (e.g., 4096, 8192)')
     parser.add_argument('--use-alibi', action='store_true', help='Enable ALiBi (not recommended with RoPE)')
     
+    # LoRA 微调参数
+    parser.add_argument('--lora', action='store_true', help='Enable LoRA fine-tuning')
+    parser.add_argument('--lora-rank', type=int, default=8, help='LoRA rank (default: 8)')
+    parser.add_argument('--lora-alpha', type=float, default=16.0, help='LoRA alpha scaling factor (default: 16.0)')
+    parser.add_argument('--lora-dropout', type=float, default=0.0, help='LoRA dropout (default: 0.0)')
+    parser.add_argument('--lora-target-modules', type=str, nargs='+', default=['q_proj', 'v_proj'],
+                        help='LoRA target modules (default: q_proj v_proj). Options: q_proj, k_proj, v_proj, out_proj')
+    
     # 分词器参数
     parser.add_argument('--tokenizer', type=str, default='char', choices=['char', 'bpe'])
     parser.add_argument('--vocab-size', type=int, default=2000)
@@ -157,6 +165,19 @@ def main():
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Parameters: {total_params:,}")
     print(f"   Size: {total_params * 4 / 1024 / 1024:.2f} MB")
+    
+    # LoRA 微调
+    if args.lora:
+        print("\n🔧 Applying LoRA...")
+        model.apply_lora(
+            rank=args.lora_rank,
+            alpha=args.lora_alpha,
+            dropout=args.lora_dropout,
+            target_modules=args.lora_target_modules,
+        )
+        # LoRA 模式下使用更高的学习率
+        config.learning_rate = args.lr * 10  # LoRA 通常可以使用更高学习率
+        print(f"   LoRA learning rate adjusted to: {config.learning_rate}")
     
     # 优化器参数分组：对偏置、归一化层和嵌入不使用 weight decay
     decay_params = []

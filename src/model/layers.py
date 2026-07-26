@@ -5,7 +5,7 @@
 import torch
 import torch.nn as nn
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -650,3 +650,139 @@ class RMSNorm(nn.Module):
         """
         rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + self.eps)
         return self.weight * (x / rms)
+
+
+class LoRALinear(nn.Module):
+    """
+    LoRA (Low-Rank Adaptation) 线性层
+
+    通过低秩分解添加可训练适配器，冻结原始权重。
+    输出 = Wx + (alpha / rank) * BAx
+
+    标准用法:
+    - 将 LoRALinear 包装在已有 nn.Linear 层上
+    - 调用 merge_weights() 将 LoRA 权重合并到原始权重中
+    - 调用 unmerge_weights() 分离 LoRA 权重
+    """
+
+    def __init__(
+        self,
+        existing_linear: nn.Linear,
+        rank: int = 8,
+        alpha: float = 16.0,
+        dropout: float = 0.0,
+        merge_weights: bool = False,
+    ):
+        """
+        初始化 LoRA 线性层
+
+        Args:
+            existing_linear: 已有的 nn.Linear 层
+            rank: 低秩分解的秩
+            alpha: 缩放因子
+            dropout: LoRA dropout 概率
+            merge_weights: 是否合并权重（推理时使用）
+        """
+        super().__init__()
+        self.rank = rank
+        self.alpha = alpha
+        self.scaling = alpha / rank
+        self.merge_weights = merge_weights
+        self.merged = False
+
+        in_features = existing_linear.in_features
+        out_features = existing_linear.out_features
+
+        # 冻结原始权重和偏置
+        self.linear = existing_linear
+        self.linear.weight.requires_grad = False
+        if self.linear.bias is not None:
+            self.linear.bias.requires_grad = False
+
+        # LoRA 低秩矩阵（与基础线性层保持同一设备）
+        base_device = existing_linear.weight.device
+        self.lora_A = nn.Parameter(torch.zeros(rank, in_features, device=base_device))
+        self.lora_B = nn.Parameter(torch.zeros(out_features, rank, device=base_device))
+        self.lora_dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
+        # Kaiming 初始化
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.zeros_(self.lora_B)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        前向传播
+
+        Args:
+            x: 输入张量，形状为 (..., in_features)
+
+        Returns:
+            输出张量，形状为 (..., out_features)
+        """
+        # 基础线性变换
+        result = self.linear(x)
+
+        if not self.merged:
+            # LoRA 路径: scaling * x @ A.T @ B.T
+            lora_out = (
+                self.lora_dropout(x)
+                @ self.lora_A.T
+                @ self.lora_B.T
+            ) * self.scaling
+            result = result + lora_out
+
+        return result
+
+    def merge_weights_to_base(self):
+        """
+        将 LoRA 权重合并到基础线性层中（用于推理加速）
+        合并后: W' = W + (alpha/rank) * BA
+        """
+        if not self.merged:
+            delta_w = (self.lora_B @ self.lora_A) * self.scaling
+            self.linear.weight.data += delta_w
+            self.merged = True
+
+    def unmerge_weights_from_base(self):
+        """
+        从基础线性层中分离 LoRA 权重（用于继续训练）
+        """
+        if self.merged:
+            delta_w = (self.lora_B @ self.lora_A) * self.scaling
+            self.linear.weight.data -= delta_w
+            self.merged = False
+
+    def get_lora_params(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        获取 LoRA 参数（用于保存）
+
+        Returns:
+            (lora_A, lora_B) 参数元组
+        """
+        return self.lora_A.data.clone(), self.lora_B.data.clone()
+
+    def load_lora_params(self, lora_A: torch.Tensor, lora_B: torch.Tensor):
+        """
+        加载 LoRA 参数
+
+        Args:
+            lora_A: 低秩矩阵 A
+            lora_B: 低秩矩阵 B
+        """
+        device = self.lora_A.device
+        self.lora_A.data = lora_A.to(device)
+        self.lora_B.data = lora_B.to(device)
+
+    def get_lora_state_dict(self) -> Dict[str, torch.Tensor]:
+        """
+        获取仅包含 LoRA 参数的状态字典（用于保存）
+
+        Returns:
+            包含 lora_A 和 lora_B 的状态字典
+        """
+        return {
+            "lora_A": self.lora_A.data.clone(),
+            "lora_B": self.lora_B.data.clone(),
+            "rank": torch.tensor(self.rank),
+            "alpha": torch.tensor(self.alpha),
+        }
