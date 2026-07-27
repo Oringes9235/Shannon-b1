@@ -1,6 +1,6 @@
 from .dataset import TextDataset
 from .tokenizer import CharTokenizer, BPETokenizer, SimpleBPETokenizer
-from .download import download_shakespeare, load_shakespeare, create_sample_data
+from .download import download_shakespeare, load_shakespeare, create_sample_data, load_all_data
 
 def create_tokenizer(text, tokenizer_type='char', vocab_size=1000):
     """

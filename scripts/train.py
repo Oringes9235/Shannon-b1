@@ -13,7 +13,7 @@ import argparse
 from datetime import datetime
 
 from src.model import ShannonB1, ModelConfig
-from src.data import TextDataset, create_tokenizer, load_shakespeare
+from src.data import TextDataset, create_tokenizer, load_all_data, download_shakespeare
 from src.training import ImprovedTrainer, CosineAnnealingWarmupLR
 from src.utils import set_seed, get_device
 
@@ -73,6 +73,8 @@ def parse_args():
     parser.add_argument('--device', type=str, default=get_device())
     parser.add_argument('--save-path', type=str, default='checkpoints/shannon_b1.pt')
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--getdata', type=str, default=None,
+                        help='Download dataset before training, e.g. --getdata shakespeare')
     
     return parser.parse_args()
 
@@ -115,12 +117,21 @@ def main():
             print(f"GPU: {torch.cuda.get_device_name(0)}")
             print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB\n")
     
+    # Download dataset if requested
+    if args.getdata:
+        if args.getdata == 'shakespeare':
+            download_shakespeare()
+        else:
+            print(f"❌ Unknown dataset: {args.getdata}")
+            print("   Available: shakespeare")
+
     print("📚 Loading data...")
-    text = load_shakespeare()
-    tokenizer = create_tokenizer(text, args.tokenizer, args.vocab_size)
+    texts = load_all_data()
+    combined_text = "\n\n".join(texts)
+    tokenizer = create_tokenizer(combined_text, args.tokenizer, args.vocab_size)
     
     # 创建数据集并分割为训练集和验证集
-    full_dataset = TextDataset([text], tokenizer, args.seq_len)
+    full_dataset = TextDataset(texts, tokenizer, args.seq_len)
     val_size = int(len(full_dataset) * 0.1)
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])

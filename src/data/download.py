@@ -57,6 +57,42 @@ def load_shakespeare() -> str:
     return "To be or not to be, that is the question. " * 1000
 
 
+def load_all_data(data_dir: str = 'data') -> list:
+    """
+    递归加载 data 文件夹下所有 .txt 文件的内容
+
+    Args:
+        data_dir: 数据文件夹路径，默认 'data'
+
+    Returns:
+        list[str]: 所有文本内容组成的列表，如果目录为空或无 .txt 则返回单个 fallback 文本
+    """
+    texts = []
+    if os.path.isdir(data_dir):
+        for root, _, files in os.walk(data_dir):
+            for fname in files:
+                if fname.lower().endswith('.txt'):
+                    fpath = os.path.join(root, fname)
+                    try:
+                        with open(fpath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        if content.strip():
+                            texts.append(content)
+                            print(f"✅ Loaded: {fpath} ({len(content):,} chars)")
+                    except Exception as e:
+                        print(f"⚠️  Skip {fpath}: {e}")
+
+    if not texts:
+        print("⚠️  No .txt files found in data/, using fallback text")
+        sample_path = create_sample_data()
+        with open(sample_path, 'r', encoding='utf-8') as f:
+            texts.append(f.read())
+
+    total = sum(len(t) for t in texts)
+    print(f"\n📚 Total: {len(texts)} files, {total:,} chars")
+    return texts
+
+
 def create_sample_data(save_path: str = 'data/sample.txt') -> str:
     """
     创建示例数据
