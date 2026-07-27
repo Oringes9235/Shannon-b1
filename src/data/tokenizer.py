@@ -218,7 +218,9 @@ class BPETokenizer:
             if ch not in self.vocab and ch not in self.special_tokens:
                 self.vocab[ch] = self.next_id
                 self.next_id += 1
-        
+
+        # 这里的num_merges是计算BPE合并次数的公式，这里直接使用vocab_size减去已有的词汇表大小减去特殊标记的大小，
+        # 不能写死，否则训练结果会十分糟糕，出现例如生成乱码的问题
         # num_merges = min(self.vocab_size - len(self.vocab) - len(self.special_tokens), 2000)
 
         num_merges = self.vocab_size - len(self.vocab) - len(self.special_tokens)
