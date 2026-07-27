@@ -239,6 +239,10 @@ class ModelManager:
             top_p=top_p,
             repetition_penalty=repetition_penalty
         ):
+            # Stop on EOS token (CharTokenizer uses index 3 for <EOS>)
+            if token_id == 3:
+                break
+
             generated_tokens.append(token_id)
 
             # 只解码新生成的 token（排除 prompt 模板）

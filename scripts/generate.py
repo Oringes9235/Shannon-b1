@@ -11,12 +11,17 @@ import argparse
 import json
 import time
 import readline
+import shutil
 
 import torch
 
 from src.model import ShannonB1, ModelConfig
 from src.data import CharTokenizer, BPETokenizer
 from src.utils import Conversation, get_template_by_name
+
+
+# EOS token ID for CharTokenizer (index 3, '<EOS>')
+EOS_TOKEN_ID = 3
 
 
 def load_model(model_path, device="cpu"):
@@ -80,6 +85,14 @@ def _clean_new_text(text):
     return text
 
 
+def _get_terminal_width():
+    """Get terminal width, default to 80 if unavailable"""
+    try:
+        return shutil.get_terminal_size().columns
+    except Exception:
+        return 80
+
+
 def single_generate(model, tokenizer, args):
     """单次生成模式"""
     print(f"\n{'='*60}")
@@ -104,7 +117,6 @@ def single_generate(model, tokenizer, args):
     start_time = time.time()
 
     print("🚀 开始流式生成:\n")
-    # Print prompt once, then overwrite with new text each token
     print(f"{args.prompt}", end="", flush=True)
 
     try:
@@ -116,13 +128,23 @@ def single_generate(model, tokenizer, args):
             top_p=args.top_p,
             repetition_penalty=args.repetition_penalty,
         ):
+            # Stop on EOS
+            if token_id == EOS_TOKEN_ID:
+                break
+
             generated_tokens.append(token_id)
             new_tokens = generated_tokens[prompt_len:]
             new_text = tokenizer.decode(new_tokens)
             new_text = new_text.replace("</w>", " ").replace("  ", " ")
             new_text = _clean_new_text(new_text)
 
-            print(f"\r{args.prompt}{new_text}", end="", flush=True)
+            # Use \r only for single-line; for multi-line print fresh
+            if "\n" in new_text:
+                # Clear terminal line and reprint
+                print(f"\r{args.prompt}{new_text}", end="", flush=True)
+            else:
+                print(f"\r{args.prompt}{new_text}", end="", flush=True)
+
             if args.delay > 0:
                 time.sleep(args.delay)
 
@@ -266,6 +288,7 @@ def interactive_chat(model, tokenizer, args):
             generated_tokens = list(start_tokens)
             start_time = time.time()
             new_text = ""
+            printed_len = 0
 
             print("🤖 助手: ", end="", flush=True)
 
@@ -283,7 +306,13 @@ def interactive_chat(model, tokenizer, args):
                     new_text = tokenizer.decode(new_tokens)
                     new_text = new_text.replace("</w>", " ").replace("  ", " ")
                     new_text = _clean_new_text(new_text)
-                    print(f"\r🤖 助手: {new_text}", end="", flush=True)
+
+                    # Only print the new characters since last print
+                    if len(new_text) > printed_len:
+                        chunk = new_text[printed_len:]
+                        printed_len = len(new_text)
+                        sys.stdout.write(chunk)
+                        sys.stdout.flush()
 
                 # Extract final reply
                 current_text = tokenizer.decode(generated_tokens).replace("</w>", " ").replace("  ", " ").strip()

@@ -219,8 +219,10 @@ class BPETokenizer:
                 self.vocab[ch] = self.next_id
                 self.next_id += 1
         
-        num_merges = min(self.vocab_size - len(self.vocab) - len(self.special_tokens), 2000)
-        
+        # num_merges = min(self.vocab_size - len(self.vocab) - len(self.special_tokens), 2000)
+
+        num_merges = self.vocab_size - len(self.vocab) - len(self.special_tokens)
+
         # 执行BPE合并过程
         for i in range(num_merges):
             pairs = defaultdict(int)
