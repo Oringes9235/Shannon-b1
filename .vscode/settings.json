@@ -13,7 +13,5 @@
         "*.ts": "typescript",
         "*.tsx": "typescriptreact",
         "*.yaml": "yaml",
-        
-        
     }
 }

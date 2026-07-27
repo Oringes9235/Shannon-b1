@@ -10,9 +10,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import asyncio
 import json
+import uuid
 import threading
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 
 try:
@@ -21,13 +22,14 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from model_manager import ModelManager
 from training_worker import TrainingWorker
+from src.utils import Conversation, SIMPLE_TEMPLATE, get_template_by_name
 
 
 # 请求/响应模型
@@ -516,6 +518,263 @@ async def get_system_stats():
         print(f"Failed to get system stats: {e}")
     
     return stats
+
+
+# ============================================================
+# 多轮对话管理 API
+# ============================================================
+
+# 服务端对话存储 (conversation_id -> Conversation)
+conversations: Dict[str, Conversation] = {}
+
+
+@app.post("/api/conv/create")
+async def create_conversation(
+    system_prompt: Optional[str] = None,
+    template: str = "simple",
+    max_context: int = 4096
+):
+    """
+    创建一个新的对话会话
+
+    Args:
+        system_prompt: 系统提示词，用于设定模型角色或行为准则
+        template: 对话模板名称 (simple / chatml / llama3)
+        max_context: 最大上下文长度（字符数），超过自动截断
+
+    Returns:
+        dict: 包含 conversation_id 和对话初始状态
+    """
+    try:
+        conv_template = get_template_by_name(template)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Unknown template: {template}")
+
+    conv_id = str(uuid.uuid4())[:8]
+    conv = Conversation(
+        system_prompt=system_prompt,
+        template=conv_template,
+        max_context_length=max_context,
+    )
+    conversations[conv_id] = conv
+
+    return {
+        "success": True,
+        "conversation_id": conv_id,
+        "system_prompt": system_prompt,
+        "template": template,
+        "message_count": len(conv),
+    }
+
+
+@app.get("/api/conv/{conv_id}")
+async def get_conversation(conv_id: str):
+    """
+    获取指定对话的完整信息
+
+    Args:
+        conv_id: 对话ID
+
+    Returns:
+        dict: 对话的完整状态
+    """
+    conv = conversations.get(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conv_id}")
+    return {
+        "success": True,
+        "conversation": conv.to_dict(),
+    }
+
+
+@app.delete("/api/conv/{conv_id}")
+async def delete_conversation(conv_id: str):
+    """
+    删除指定对话
+
+    Args:
+        conv_id: 对话ID
+    """
+    if conv_id in conversations:
+        del conversations[conv_id]
+    return {"success": True, "message": f"Conversation {conv_id} deleted"}
+
+
+@app.post("/api/conv/{conv_id}/clear")
+async def clear_conversation(conv_id: str, keep_system: bool = True):
+    """
+    清空对话历史（可选保留系统提示词）
+
+    Args:
+        conv_id: 对话ID
+        keep_system: 是否保留系统提示词，默认True
+    """
+    conv = conversations.get(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conv_id}")
+    conv.clear(keep_system=keep_system)
+    return {"success": True, "message_count": len(conv)}
+
+
+@app.post("/api/conv/{conv_id}/system")
+async def update_system_prompt(conv_id: str, system_prompt: str = ""):
+    """
+    更新对话的系统提示词
+
+    Args:
+        conv_id: 对话ID
+        system_prompt: 新的系统提示词（空字符串表示清空）
+    """
+    conv = conversations.get(conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail=f"Conversation not found: {conv_id}")
+    conv.add_system(system_prompt if system_prompt else None)
+    return {"success": True, "system_prompt": conv.system_prompt}
+
+
+@app.get("/api/conv/list")
+async def list_conversations():
+    """
+    列出所有活跃的对话会话
+
+    Returns:
+        list: 对话摘要列表
+    """
+    result = []
+    for conv_id, conv in conversations.items():
+        result.append({
+            "conversation_id": conv_id,
+            "system_prompt": conv.system_prompt,
+            "message_count": len(conv),
+            "user_messages": sum(1 for m in conv.messages if m.role == "user"),
+            "assistant_messages": sum(1 for m in conv.messages if m.role == "assistant"),
+            "total_chars": sum(len(m.content) for m in conv.messages),
+        })
+    return result
+
+
+# ============================================================
+# 多轮对话生成 API（带 conversation 参数）
+# ============================================================
+
+class ConvGenerateRequest(BaseModel):
+    """
+    多轮对话生成请求
+    如传入 conversation_id，则使用对话历史构建 prompt，并自动更新历史
+    """
+    prompt: str
+    conversation_id: Optional[str] = None  # 关联的对话ID（可选）
+    system_prompt: Optional[str] = None    # 单轮模式下的系统提示词
+    max_tokens: int = 100
+    temperature: float = 0.8
+    top_k: int = 40
+    top_p: float = 0.9
+    repetition_penalty: float = 1.15
+
+
+@app.post("/api/conv/generate")
+async def conv_generate(request: ConvGenerateRequest):
+    """
+    多轮对话生成（非流式）
+    如果提供 conversation_id，则自动使用对话历史并更新
+
+    Args:
+        request: ConvGenerateRequest 对象
+
+    Returns:
+        dict: 生成结果 + 更新后的对话
+    """
+    if not model_manager.is_loaded():
+        raise HTTPException(status_code=400, detail="No model loaded. Please load a model first.")
+
+    # 获取或创建对话
+    conversation = None
+    if request.conversation_id:
+        conversation = conversations.get(request.conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404,
+                                detail=f"Conversation not found: {request.conversation_id}")
+
+    try:
+        result = model_manager.generate(
+            prompt=request.prompt,
+            system_prompt=request.system_prompt,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+            top_k=request.top_k,
+            top_p=request.top_p,
+            repetition_penalty=request.repetition_penalty,
+            conversation=conversation,
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/conv/generate/stream")
+async def conv_generate_stream(request: ConvGenerateRequest):
+    """
+    多轮对话流式生成（SSE）
+    如果提供 conversation_id，则自动使用对话历史并更新
+
+    Args:
+        request: ConvGenerateRequest 对象
+    """
+    if not model_manager.is_loaded():
+        raise HTTPException(status_code=400, detail="No model loaded. Please load a model first.")
+
+    # 获取或创建对话
+    conversation = None
+    if request.conversation_id:
+        conversation = conversations.get(request.conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404,
+                                detail=f"Conversation not found: {request.conversation_id}")
+
+    async def event_generator():
+        import asyncio
+        import sys
+
+        try:
+            sync_generator = model_manager.generate_stream(
+                prompt=request.prompt,
+                system_prompt=request.system_prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_k=request.top_k,
+                top_p=request.top_p,
+                repetition_penalty=request.repetition_penalty,
+                conversation=conversation,
+            )
+
+            for chunk in sync_generator:
+                data_line = f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                yield data_line
+                sys.stdout.flush()
+
+                if chunk.get("is_complete", False):
+                    yield f"data: {json.dumps({'type': 'complete'}, ensure_ascii=False)}\n\n"
+                    break
+
+                await asyncio.sleep(0)
+
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] Conv stream generation failed: {e}\n{traceback.format_exc()}")
+            error_chunk = {"type": "error", "error": str(e)}
+            yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Transfer-Encoding": "chunked",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
 
 
 if __name__ == "__main__":

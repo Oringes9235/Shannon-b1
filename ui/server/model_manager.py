@@ -228,7 +228,9 @@ class ModelManager:
         start_tokens = self.tokenizer.encode(full_prompt)[:50]
 
         # 流式生成
+        prompt_len = len(start_tokens)
         generated_tokens = list(start_tokens)
+        new_text = ""
         for token_id, probability in self.model.generate_stream(
             start_tokens,
             max_tokens,
@@ -239,21 +241,33 @@ class ModelManager:
         ):
             generated_tokens.append(token_id)
 
-            # 解码当前生成的文本
-            current_text = self.tokenizer.decode(generated_tokens)
-            current_text = current_text.replace('</w>', ' ').replace('  ', ' ').strip()
+            # 只解码新生成的 token（排除 prompt 模板）
+            new_tokens = generated_tokens[prompt_len:]
+            new_text = self.tokenizer.decode(new_tokens)
+            new_text = new_text.replace('</w>', ' ').replace('  ', ' ')
 
-            # Yield当前状态
-            yield {
-                "token_id": token_id,
-                "text": current_text,
-                "probability": probability,
-                "tokens_generated": len(generated_tokens) - len(start_tokens),
-                "is_complete": False
-            }
+            # 去掉可能残留的模板标记（仅在开头有完整标记时去除）
+            for m in ["[ASSISTANT]\n", "[ASSISTANT] ", "[ASSISTANT]",
+                      "<|im_start|>assistant\n", "<|im_start|>assistant",
+                      "assistant\n", "assistant "]:
+                if new_text.startswith(m):
+                    new_text = new_text[len(m):]
+
+            # Yield当前状态（只发送纯净的新生成文本，跳过纯空）
+            if new_text or len(generated_tokens) - prompt_len <= 2:
+                yield {
+                    "token_id": token_id,
+                    "text": new_text,
+                    "probability": probability,
+                    "tokens_generated": len(generated_tokens) - prompt_len,
+                    "is_complete": False
+                }
 
         # 提取助手回复
+        current_text = self.tokenizer.decode(generated_tokens).replace('</w>', ' ').replace('  ', ' ').strip()
         assistant_reply = self._extract_assistant_reply(current_text, full_prompt)
+        if not assistant_reply:
+            assistant_reply = new_text
 
         # 更新对话历史
         if conversation is not None:
