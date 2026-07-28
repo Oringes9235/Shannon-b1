@@ -1,5 +1,6 @@
 """
 分词器模块 - 完整版
+使用 HuggingFace tokenizers (Rust 实现) 进行高速 BPE 训练和编码
 """
 
 import json
@@ -7,19 +8,17 @@ import re
 from collections import defaultdict
 from typing import List, Dict, Tuple, Optional
 
+from tokenizers import Tokenizer as HFTokenizer
+from tokenizers.models import BPE
+from tokenizers.trainers import BpeTrainer
+from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.decoders import BPEDecoder as HFBPEDecoder
+
 
 class CharTokenizer:
     """字符级分词器"""
     
     def __init__(self):
-        """
-        初始化字符级分词器
-        
-        Attributes:
-            char_to_idx: 字符到索引的映射字典
-            idx_to_char: 索引到字符的映射字典  
-            special_tokens: 特殊标记字典，包括填充、未知、开始、结束标记
-        """
         self.char_to_idx = {}
         self.idx_to_char = {}
         self.special_tokens = {
@@ -30,16 +29,6 @@ class CharTokenizer:
         }
     
     def build_vocab(self, texts: List[str], vocab_size: int = 1000):
-        """
-        构建词汇表
-        
-        Args:
-            texts: 训练文本列表
-            vocab_size: 目标词汇表大小，默认1000
-            
-        Returns:
-            返回当前分词器实例用于链式调用
-        """
         chars = set()
         for text in texts:
             chars.update(text)
@@ -56,17 +45,6 @@ class CharTokenizer:
         return self
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
-        """
-        将文本编码为token序列
-        
-        Args:
-            text: 输入文本字符串
-            add_bos: 是否在开头添加<BOS>标记
-            add_eos: 是否在末尾添加<EOS>标记
-            
-        Returns:
-            编码后的token索引列表
-        """
         tokens = []
         for ch in text:
             if ch in self.char_to_idx:
@@ -82,16 +60,6 @@ class CharTokenizer:
         return tokens
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
-        """
-        将token序列解码为文本
-        
-        Args:
-            tokens: token索引列表
-            skip_special: 是否跳过特殊标记
-            
-        Returns:
-            解码后的文本字符串
-        """
         chars = []
         for t in tokens:
             ch = self.idx_to_char.get(t, '<UNK>')
@@ -101,30 +69,12 @@ class CharTokenizer:
         return ''.join(chars)
     
     def get_vocab_size(self) -> int:
-        """
-        获取词汇表大小
-        
-        Returns:
-            词汇表中token的数量
-        """
         return len(self.char_to_idx)
     
     def get_pad_id(self) -> int:
-        """
-        获取填充标记的ID
-        
-        Returns:
-            <PAD>标记对应的索引
-        """
         return self.char_to_idx['<PAD>']
     
     def save(self, path: str):
-        """
-        保存分词器到文件
-        
-        Args:
-            path: 保存路径
-        """
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
                 'char_to_idx': self.char_to_idx,
@@ -132,318 +82,262 @@ class CharTokenizer:
             }, f, ensure_ascii=False, indent=2)
     
     def load(self, path: str):
-        """
-        从文件加载分词器
-        
-        Args:
-            path: 加载路径
-        """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
         self.idx_to_char = {}
-        # char_to_idx: mapping from character (str) -> index (int)
-        # we need idx_to_char as index (int) -> character (str)
         for ch, idx in self.char_to_idx.items():
             try:
                 self.idx_to_char[int(idx)] = ch
             except (ValueError, TypeError):
-                # fallback: keep original
                 self.idx_to_char[idx] = ch
         self.special_tokens = data.get('special_tokens', self.special_tokens)
 
 
 class BPETokenizer:
-    """BPE分词器"""
+    """
+    BPE分词器 — 双模式实现
+    
+    - 训练模式：使用 HuggingFace tokenizers (Rust)，速度极快
+    - 回退模式：加载旧版 checkpoint tokenizer 时使用 Python BPE 逻辑确保 ID 一致
+    """
     
     def __init__(self, vocab_size: int = 5000):
-        """
-        初始化BPE分词器
-        
-        Args:
-            vocab_size: 目标词汇表大小，默认5000
-            
-        Attributes:
-            vocab_size: 目标词汇表大小
-            merges: BPE合并规则字典
-            vocab: 词汇表字典
-            idx_to_token: 索引到token的映射
-            special_tokens: 特殊标记字典
-            next_id: 下一个可用ID
-            pat: 正则表达式模式用于预处理文本
-        """
         self.vocab_size = vocab_size
-        self.merges: Dict[Tuple[str, str], int] = {}
-        self.vocab: Dict[str, int] = {}
-        self.idx_to_token: Dict[int, str] = {}
         
+        # 创建底层 HuggingFace Rust tokenizer (用于训练)
+        self._hf = HFTokenizer(BPE(unk_token="<UNK>"))
+        self._hf.pre_tokenizer = Whitespace()
+        self._hf.decoder = HFBPEDecoder()
+        
+        # 特殊 token 映射
         self.special_tokens = {
             '<PAD>': 0,
             '<UNK>': 1,
             '<BOS>': 2,
             '<EOS>': 3,
         }
-        self.next_id = len(self.special_tokens)
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+| ?[^\s\w]|\s+(?!\S)|\s+""", re.UNICODE)
+        
+        # 旧版数据（用于回退模式）
+        self._legacy_mode = False
+        self._legacy_vocab: Dict[str, int] = {}
+        self._legacy_idx_to_token: Dict[int, str] = {}
+        self._legacy_merges: Dict[Tuple[str, str], int] = {}
+        
+        # 兼容外部访问
+        self.merges: Dict[Tuple[str, str], int] = {}
+        self.vocab: Dict[str, int] = {}
+        self.idx_to_token: Dict[int, str] = {}
+    
+    def _rebuild_mappings(self):
+        """从底层 tokenizer 重建所有内部映射"""
+        vocab = self._hf.get_vocab()
+        for token in ['<PAD>', '<UNK>', '<BOS>', '<EOS>']:
+            if token in vocab:
+                self.special_tokens[token] = vocab[token]
+        self.vocab = dict(vocab)
+        self.idx_to_token = {v: k for k, v in vocab.items()}
     
     def train(self, texts: List[str], min_frequency: int = 2, verbose: bool = True):
-        """
-        训练BPE分词器
-        
-        Args:
-            texts: 训练文本列表
-            min_frequency: 最小频率阈值，默认2
-            verbose: 是否打印训练进度，默认True
-        """
         if verbose:
             print(f"Training BPE tokenizer (target: {self.vocab_size})")
         
-        # 统计词频并进行预处理
-        word_counts = defaultdict(int)
-        for text in texts:
-            words = self.pat.findall(text)
-            for word in words:
-                word_with_end = ' '.join(list(word)) + ' </w>'
-                word_counts[word_with_end] += 1
+        trainer = BpeTrainer(
+            vocab_size=self.vocab_size,
+            min_frequency=min_frequency,
+            special_tokens=["<PAD>", "<UNK>", "<BOS>", "<EOS>"],
+            show_progress=verbose,
+            continuing_subword_prefix="",
+            end_of_word_suffix="</w>",
+        )
         
-        # 收集所有字符
-        chars = set()
-        for word in word_counts.keys():
-            for ch in word.split():
-                if ch != '</w>':
-                    chars.add(ch)
-        
-        # 初始化基础词汇表
-        for ch in sorted(chars):
-            if ch not in self.vocab and ch not in self.special_tokens:
-                self.vocab[ch] = self.next_id
-                self.next_id += 1
-
-        # 这里的num_merges是计算BPE合并次数的公式，这里直接使用vocab_size减去已有的词汇表大小减去特殊标记的大小，
-        # 不能写死，否则训练结果会十分糟糕，出现例如生成乱码的问题
-        # num_merges = min(self.vocab_size - len(self.vocab) - len(self.special_tokens), 2000)
-
-        num_merges = self.vocab_size - len(self.vocab) - len(self.special_tokens)
-
-        # 执行BPE合并过程
-        for i in range(num_merges):
-            pairs = defaultdict(int)
-            for word, count in word_counts.items():
-                symbols = word.split()
-                for j in range(len(symbols) - 1):
-                    pairs[(symbols[j], symbols[j + 1])] += count
-            
-            if not pairs:
-                break
-            
-            best_pair = max(pairs, key=pairs.get)
-            if pairs[best_pair] < min_frequency:
-                break
-            
-            new_token = ''.join(best_pair)
-            self.merges[best_pair] = self.next_id
-            self.vocab[new_token] = self.next_id
-            self.next_id += 1
-            
-            new_word_counts = {}
-            bigram = ' '.join(best_pair)
-            merged = new_token
-            for word, count in word_counts.items():
-                new_word = word.replace(bigram, merged)
-                new_word_counts[new_word] = count
-            word_counts = new_word_counts
-            
-            if verbose and (i + 1) % 200 == 0:
-                print(f"  Merges: {i+1}/{num_merges}, vocab: {len(self.vocab)}")
-        
-        self.idx_to_token = {v: k for k, v in self.vocab.items()}
+        self._hf.train_from_iterator(texts, trainer=trainer)
+        self._legacy_mode = False
+        self._rebuild_mappings()
         
         if verbose:
-            print(f"✅ BPE: {len(self.vocab)} tokens, {len(self.merges)} merges")
+            real_vocab = self._hf.get_vocab_size()
+            print(f"✅ BPE: {real_vocab} tokens")
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
-        """
-        将文本编码为token序列
-        
-        Args:
-            text: 输入文本字符串
-            add_bos: 是否在开头添加<BOS>标记
-            add_eos: 是否在末尾添加<EOS>标记
-            
-        Returns:
-            编码后的token索引列表
-        """
         if not text:
-            tokens = []
+            return []
+        
+        if self._legacy_mode:
+            token_ids = self._legacy_encode(text)
         else:
-            words = self.pat.findall(text)
-            tokens = []
-            for word in words:
-                word_tokens = self._encode_word(word)
-                tokens.extend(word_tokens)
+            enc = self._hf.encode(text)
+            token_ids = enc.ids
         
         if add_bos:
-            tokens = [self.special_tokens['<BOS>']] + tokens
+            token_ids = [self.special_tokens['<BOS>']] + token_ids
         if add_eos:
-            tokens = tokens + [self.special_tokens['<EOS>']]
+            token_ids = token_ids + [self.special_tokens['<EOS>']]
         
-        return tokens
+        return token_ids
     
-    def _encode_word(self, word: str) -> List[int]:
-        """
-        对单个词进行编码
+    def _legacy_encode(self, text: str) -> List[int]:
+        """使用旧版 merge 规则编码，确保 token ID 与 checkpoint 一致"""
+        # 先用预分词器切词 (与旧版 pat 逻辑一致)
+        words = self._legacy_pat.findall(text) if hasattr(self, '_legacy_pat') else [text]
         
-        Args:
-            word: 输入单词字符串
+        token_ids = []
+        for word in words:
+            symbols = list(word) + ['</w>']
             
-        Returns:
-            编码后的token索引列表
-        """
-        symbols = list(word) + ['</w>']
+            # BPE 合并 (按 merge_id 优先级)
+            while len(symbols) > 1:
+                min_pair = None
+                min_idx = float('inf')
+                for i in range(len(symbols) - 1):
+                    pair = (symbols[i], symbols[i + 1])
+                    if pair in self._legacy_merges:
+                        if self._legacy_merges[pair] < min_idx:
+                            min_idx = self._legacy_merges[pair]
+                            min_pair = (i, pair)
+                
+                if min_pair is None:
+                    break
+                
+                i, pair = min_pair
+                symbols[i] = ''.join(pair)
+                del symbols[i + 1]
+            
+            # 查表转 ID
+            for s in symbols:
+                if s in self._legacy_vocab:
+                    token_ids.append(self._legacy_vocab[s])
+                else:
+                    for ch in s:
+                        token_ids.append(self._legacy_vocab.get(ch, self.special_tokens['<UNK>']))
         
-        # 执行反向合并过程
-        while len(symbols) > 1:
-            min_pair = None
-            min_idx = float('inf')
-            
-            for i in range(len(symbols) - 1):
-                pair = (symbols[i], symbols[i + 1])
-                if pair in self.merges:
-                    if self.merges[pair] < min_idx:
-                        min_idx = self.merges[pair]
-                        min_pair = (i, pair)
-            
-            if min_pair is None:
-                break
-            
-            i, pair = min_pair
-            symbols[i] = ''.join(pair)
-            del symbols[i + 1]
-        
-        tokens = []
-        for s in symbols:
-            if s in self.vocab:
-                tokens.append(self.vocab[s])
-            else:
-                for ch in s:
-                    if ch in self.vocab:
-                        tokens.append(self.vocab[ch])
-                    else:
-                        tokens.append(self.special_tokens['<UNK>'])
-        
-        return tokens
+        return token_ids
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
-        """
-        将token序列解码为文本
+        if skip_special:
+            skip_ids = {v for k, v in self.special_tokens.items() if k in ['<PAD>', '<BOS>', '<EOS>']}
+            tokens = [t for t in tokens if t not in skip_ids]
         
-        Args:
-            tokens: token索引列表
-            skip_special: 是否跳过特殊标记
-            
-        Returns:
-            解码后的文本字符串
-        """
-        chars: List[str] = []
+        if self._legacy_mode:
+            return self._legacy_decode(tokens)
+        else:
+            return self._hf.decode(tokens)
+    
+    def _legacy_decode(self, tokens: List[int]) -> str:
+        """旧版解码"""
+        chars = []
         for t in tokens:
-            if t in self.idx_to_token:
-                token = self.idx_to_token[t]
-                if skip_special and token in self.special_tokens:
-                    continue
-
-                # 处理以 '</w>' 结尾的 token（表示单词结尾），例如 'w</w>' -> 'w '
-                if isinstance(token, str) and token.endswith('</w>'):
-                    body = token[:-4]
-                    if body:
-                        chars.append(body)
-                    chars.append(' ')
-                elif token == '</w>':
-                    chars.append(' ')
-                else:
-                    chars.append(token)
+            token = self._legacy_idx_to_token.get(t, '<UNK>')
+            if isinstance(token, str) and token.endswith('</w>'):
+                body = token[:-4]
+                if body:
+                    chars.append(body)
+                chars.append(' ')
+            elif token == '</w>':
+                chars.append(' ')
             else:
-                chars.append('<UNK>')
-
+                chars.append(token)
+        
         text = ''.join(chars)
-        # 规范化空白并去掉首尾空格
         text = re.sub(r'\s+', ' ', text).strip()
         return text
     
     def get_vocab_size(self) -> int:
-        """
-        获取词汇表大小
-        
-        Returns:
-            包括特殊标记在内的总词汇表大小
-        """
-        return len(self.vocab) + len(self.special_tokens)
+        if self._legacy_mode:
+            return len(self._legacy_vocab) + len(self.special_tokens)
+        return self._hf.get_vocab_size()
     
     def get_pad_id(self) -> int:
-        """
-        获取填充标记的ID
-        
-        Returns:
-            <PAD>标记对应的索引
-        """
-        return self.special_tokens['<PAD>']
+        return self.special_tokens.get('<PAD>', 0)
     
     def save(self, path: str):
-        """
-        保存分词器到文件
-        
-        Args:
-            path: 保存路径
-        """
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump({
-                'vocab': self.vocab,
-                'merges': {f"{k[0]}|{k[1]}": v for k, v in self.merges.items()},
-                'special_tokens': self.special_tokens,
-                'vocab_size': self.vocab_size
-            }, f, ensure_ascii=False, indent=2)
+        """保存分词器为 HuggingFace tokenizer 格式"""
+        self._hf.save(path)
     
     def load(self, path: str):
         """
-        从文件加载分词器
-        
-        Args:
-            path: 加载路径
+        加载分词器，支持两种格式:
+        1. HuggingFace tokenizer JSON (新格式，有 "model" 键)
+        2. 旧版自定义 JSON (有 "vocab" + "merges" 键) → 回退模式
         """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        self.vocab = data['vocab']
-        self.special_tokens = data['special_tokens']
-        self.vocab_size = data['vocab_size']
+        if "model" in data:
+            # HF 格式
+            self._hf = HFTokenizer.from_file(path)
+            self._legacy_mode = False
+            self._rebuild_mappings()
+            
+        elif "vocab" in data and "merges" in data:
+            # 旧版自定义格式 → 回退模式，确保 token ID 一致
+            self._load_legacy_format(data)
+            
+        else:
+            raise ValueError(f"Unknown tokenizer format in {path}. Keys: {list(data.keys())}")
+    
+    def _load_legacy_format(self, data: dict):
+        """
+        加载旧版自定义 JSON 格式
         
-        self.merges = {}
-        for k, v in data['merges'].items():
+        {
+            "vocab": {"a": 4, "b": 5, ...},
+            "merges": {"a|b": 200, ...},
+            "special_tokens": {"<PAD>": 0, ...},
+            "vocab_size": 6494
+        }
+        """
+        self._legacy_mode = True
+        
+        # 词表
+        self._legacy_vocab = data["vocab"]
+        self._legacy_idx_to_token = {int(v): k for k, v in self._legacy_vocab.items()}
+        
+        # 合并规则
+        self._legacy_merges = {}
+        for k, v in data["merges"].items():
             parts = k.split('|')
-            self.merges[(parts[0], parts[1])] = v
+            self._legacy_merges[(parts[0], parts[1])] = v
         
-        self.idx_to_token = {v: k for k, v in self.vocab.items()}
-        for k, v in self.special_tokens.items():
-            self.idx_to_token[v] = k
+        # 特殊 token
+        self.special_tokens = data.get("special_tokens", {
+            '<PAD>': 0, '<UNK>': 1, '<BOS>': 2, '<EOS>': 3,
+        })
         
-        self.next_id = max(self.vocab.values()) + 1 if self.vocab else len(self.special_tokens)
+        # 同步外部访问
+        self.vocab = self._legacy_vocab
+        self.idx_to_token = self._legacy_idx_to_token
+        self.merges = self._legacy_merges
+        
+        # 构建与旧版相同的预分词器
+        self._legacy_pat = re.compile(
+            r"""'s|'t|'re|'ve|'m|'ll|'d| ?[a-zA-Z]+| ?[0-9]+| ?[^\s\w]|\s+(?!\S)|\s+""",
+            re.UNICODE
+        )
+        
+        # 用合成数据初始化 _hf (用于非 encode/decode 的内部调用)
+        single_chars = sorted({
+            t for t in self._legacy_vocab
+            if len(t) == 1 and t not in ('<PAD>', '<UNK>', '<BOS>', '<EOS>', '</w>')
+        })
+        synthetic_text = ' '.join(single_chars) if single_chars else "a b c"
+        
+        trainer = BpeTrainer(
+            vocab_size=len(self._legacy_vocab) + 4,
+            min_frequency=1,
+            special_tokens=["<PAD>", "<UNK>", "<BOS>", "<EOS>"],
+            show_progress=False,
+            continuing_subword_prefix="",
+            end_of_word_suffix="</w>",
+        )
+        self._hf.train_from_iterator([synthetic_text], trainer=trainer)
 
 
+# SimpleBPETokenizer 保持原有实现不变
 class SimpleBPETokenizer:
     """简化BPE分词器"""
     
     def __init__(self, vocab_size: int = 1000):
-        """
-        初始化简化BPE分词器
-        
-        Args:
-            vocab_size: 目标词汇表大小，默认1000
-            
-        Attributes:
-            vocab_size: 目标词汇表大小
-            char_to_idx: 字符到索引的映射
-            idx_to_char: 索引到字符的映射
-            special_tokens: 特殊标记字典
-        """
         self.vocab_size = vocab_size
         self.char_to_idx = {}
         self.idx_to_char = {}
@@ -455,12 +349,6 @@ class SimpleBPETokenizer:
         }
     
     def build_vocab(self, texts: List[str]):
-        """
-        构建词汇表
-        
-        Args:
-            texts: 训练文本列表
-        """
         chars = set()
         for text in texts:
             chars.update(text)
@@ -477,17 +365,6 @@ class SimpleBPETokenizer:
         return self
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
-        """
-        将文本编码为token序列
-        
-        Args:
-            text: 输入文本字符串
-            add_bos: 是否在开头添加<BOS>标记
-            add_eos: 是否在末尾添加<EOS>标记
-            
-        Returns:
-            编码后的token索引列表
-        """
         tokens = []
         for ch in text:
             if ch in self.char_to_idx:
@@ -503,16 +380,6 @@ class SimpleBPETokenizer:
         return tokens
     
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
-        """
-        将token序列解码为文本
-        
-        Args:
-            tokens: token索引列表
-            skip_special: 是否跳过特殊标记
-            
-        Returns:
-            解码后的文本字符串
-        """
         chars = []
         for t in tokens:
             ch = self.idx_to_char.get(t, '<UNK>')
@@ -522,30 +389,12 @@ class SimpleBPETokenizer:
         return ''.join(chars)
     
     def get_vocab_size(self) -> int:
-        """
-        获取词汇表大小
-        
-        Returns:
-            词汇表中token的数量
-        """
         return len(self.char_to_idx)
     
     def get_pad_id(self) -> int:
-        """
-        获取填充标记的ID
-        
-        Returns:
-            <PAD>标记对应的索引
-        """
         return self.char_to_idx['<PAD>']
     
     def save(self, path: str):
-        """
-        保存分词器到文件
-        
-        Args:
-            path: 保存路径
-        """
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
                 'char_to_idx': self.char_to_idx,
@@ -553,12 +402,6 @@ class SimpleBPETokenizer:
             }, f, ensure_ascii=False, indent=2)
     
     def load(self, path: str):
-        """
-        从文件加载分词器
-        
-        Args:
-            path: 加载路径
-        """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.char_to_idx = data['char_to_idx']
