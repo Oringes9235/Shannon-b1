@@ -7,16 +7,6 @@ import urllib.request
 
 
 def download_shakespeare(save_path: str = 'data/shakespeare.txt') -> str:
-    """
-    下载莎士比亚文本
-    
-    Args:
-        save_path (str): 保存路径，默认为'data/shakespeare.txt'
-        
-    Returns:
-        str: 成功时返回保存路径，失败时返回None
-    """
-    # 创建目录
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
     url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
@@ -33,15 +23,6 @@ def download_shakespeare(save_path: str = 'data/shakespeare.txt') -> str:
 
 
 def load_shakespeare() -> str:
-    """
-    加载莎士比亚文本
-
-    优先使用本地文件 data/shakespeare.txt（如果存在），否则尝试下载；
-    下载失败时使用内置的备用文本。
-    
-    Returns:
-        str: 莎士比亚文本内容
-    """
     local_path = 'data/shakespeare.txt'
     if os.path.exists(local_path):
         with open(local_path, 'r', encoding='utf-8') as f:
@@ -58,15 +39,6 @@ def load_shakespeare() -> str:
 
 
 def load_all_data(data_dir: str = 'data') -> list:
-    """
-    递归加载 data 文件夹下所有 .txt 文件的内容
-
-    Args:
-        data_dir: 数据文件夹路径，默认 'data'
-
-    Returns:
-        list[str]: 所有文本内容组成的列表，如果目录为空或无 .txt 则返回单个 fallback 文本
-    """
     texts = []
     if os.path.isdir(data_dir):
         for root, _, files in os.walk(data_dir):
@@ -93,17 +65,39 @@ def load_all_data(data_dir: str = 'data') -> list:
     return texts
 
 
-def create_sample_data(save_path: str = 'data/sample.txt') -> str:
+def load_data_chunks(data_dir: str = 'data', chunk_size: int = 1_000_000):
     """
-    创建示例数据
+    分块读取 data 目录下所有 .txt 文件，返回生成器。
+    适用于 BPE tokenizer 流式训练，避免一次性加载全部数据到内存。
     
     Args:
-        save_path (str): 保存路径，默认为'data/sample.txt'
-        
-    Returns:
-        str: 保存路径
+        data_dir: 数据文件夹路径
+        chunk_size: 每块字符数，默认 1M
+    
+    Yields:
+        str: 文本块
     """
-    # 创建目录
+    count = 0
+    if not os.path.isdir(data_dir):
+        return
+    
+    for root, _, files in os.walk(data_dir):
+        for fname in sorted(files):
+            if fname.lower().endswith('.txt'):
+                fpath = os.path.join(root, fname)
+                total = os.path.getsize(fpath)
+                print(f"📖 Streaming: {fpath} ({total:,} bytes)")
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    while True:
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        count += 1
+                        yield chunk
+    print(f"✅ Yielded {count} chunks for training")
+
+
+def create_sample_data(save_path: str = 'data/sample.txt') -> str:
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     
     sample_text = """Once upon a time, there was a little girl named Alice. She lived in a small village
@@ -115,7 +109,6 @@ beautiful garden full of flowers she had never seen before. In the middle of the
 garden stood a small cottage. An old woman came out and smiled at Alice. "Welcome,"
 she said, "I have been waiting for you." And so began Alice's greatest adventure."""
     
-    # 写入示例文本到文件
     with open(save_path, 'w', encoding='utf-8') as f:
         f.write(sample_text)
     

@@ -213,15 +213,55 @@ class BPETokenizer:
         
         return token_ids
     
-    def decode(self, tokens: List[int], skip_special: bool = True) -> str:
-        if skip_special:
-            skip_ids = {v for k, v in self.special_tokens.items() if k in ['<PAD>', '<BOS>', '<EOS>']}
-            tokens = [t for t in tokens if t not in skip_ids]
+    # def decode(self, tokens: List[int], skip_special: bool = True) -> str:
+    #     if skip_special:
+    #         skip_ids = {v for k, v in self.special_tokens.items() if k in ['<PAD>', '<BOS>', '<EOS>']}
+    #         tokens = [t for t in tokens if t not in skip_ids]
         
-        if self._legacy_mode:
-            return self._legacy_decode(tokens)
-        else:
-            return self._hf.decode(tokens)
+    #     if self._legacy_mode:
+    #         return self._legacy_decode(tokens)
+    #     else:
+    #         return self._hf.decode(tokens)
+    
+    def decode(self, tokens: List[int], skip_special: bool = True) -> str:
+        """
+        将token序列解码为文本（修复词间粘连）
+        """
+        words: List[str] = []
+        current_word: List[str] = []
+        
+        for t in tokens:
+            if t in self.idx_to_token:
+                token = self.idx_to_token[t]
+                if skip_special and token in self.special_tokens:
+                    continue
+                
+                # 处理以 '</w>' 结尾的 token（表示单词结尾）
+                if isinstance(token, str) and token.endswith('</w>'):
+                    body = token[:-4]  # 去掉 </w>
+                    if body:
+                        current_word.append(body)
+                    # 单词结束，拼起来加空格
+                    words.append(''.join(current_word))
+                    current_word = []
+                elif token == '</w>':
+                    # 单独的单词结束符
+                    words.append(''.join(current_word))
+                    current_word = []
+                else:
+                    # 非结束符，追加到当前单词
+                    current_word.append(token)
+            else:
+                current_word.append('<UNK>')
+        
+        # 处理最后一个不完整的单词
+        if current_word:
+            words.append(''.join(current_word))
+        
+        # 拼接并清理空白
+        text = ' '.join(words)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
     
     def _legacy_decode(self, tokens: List[int]) -> str:
         """旧版解码"""

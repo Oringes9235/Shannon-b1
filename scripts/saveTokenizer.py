@@ -1,8 +1,9 @@
 import json
 import sys
+import os
 import torch
 sys.path.insert(0, '.')
-from src.data import BPETokenizer, load_shakespeare, CharTokenizer
+from src.data import BPETokenizer, CharTokenizer, load_all_data, load_data_chunks, create_tokenizer_streaming
 
 # 读取 checkpoint 获取模型期望的 vocab_size
 MODEL_PATH = 'checkpoints/shannon_b1_best.pt'
@@ -16,21 +17,32 @@ elif 'model_config' in ckpt:
     expected_vocab_size = ckpt['model_config'].vocab_size
 print(f"模型期望 vocab_size: {expected_vocab_size}")
 
-# 加载莎士比亚文本
-text = load_shakespeare()
-print(f"训练文本长度: {len(text)} 字符")
+# 加载与训练时相同的数据（data/ 目录下所有 .txt 文件）
+texts = load_all_data('data')
+total_chars = sum(len(t) for t in texts)
+print(f"训练文本总长度: {total_chars:,} 字符")
 
-# 创建并训练 tokenizer（与模型匹配的 vocab_size）
 if expected_vocab_size and expected_vocab_size > 100:
-    # 大于 100 用 BPE
+    # BPE tokenizer — 大数据集用流式分块训练，小数据集直接训练
     print(f"训练 BPE tokenizer (target {expected_vocab_size})...")
-    tokenizer = BPETokenizer(vocab_size=expected_vocab_size)
-    tokenizer.train([text], verbose=True)
+    if total_chars > 50_000_000:
+        # 超过 50MB 用流式训练，避免内存溢出
+        tokenizer = create_tokenizer_streaming(
+            tokenizer_type='bpe',
+            vocab_size=expected_vocab_size,
+            data_dir='data',
+            chunk_size=1_000_000,
+        )
+    else:
+        combined_text = "\n\n".join(texts)
+        tokenizer = BPETokenizer(vocab_size=expected_vocab_size)
+        tokenizer.train([combined_text], verbose=True)
 else:
     # 小词汇表用字符级
     print(f"训练 CharTokenizer (target {expected_vocab_size or 1000})...")
     tokenizer = CharTokenizer()
-    tokenizer.build_vocab([text], expected_vocab_size or 1000)
+    combined_text = "\n\n".join(texts) if texts else "sample text"
+    tokenizer.build_vocab([combined_text], expected_vocab_size or 1000)
 
 # 保存
 tokenizer.save(OUTPUT_PATH)
