@@ -3,27 +3,69 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  color-scheme: dark;
 }
 
-/* 自定义滚动条样式 - 设置滚动条的整体尺寸 */
+/* GitHub Dark Theme Base */
+body {
+  background-color: #0d1117;
+  color: #e6edf3;
+  margin: 0;
+}
+
+/* Scrollbar - GitHub style */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-
-/* 自定义滚动条轨道样式 - 设置滚动条轨道的背景色 */
 ::-webkit-scrollbar-track {
-  background: #1f2937;
+  background: #0d1117;
 }
-
-/* 自定义滚动条滑块样式 - 设置滚动条滑块的背景色和圆角 */
 ::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  background: #30363d;
   border-radius: 4px;
 }
-
-/* 自定义滚动条滑块悬停样式 - 设置鼠标悬停时滚动条滑块的背景色 */
 ::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
+  background: #484f58;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d #0d1117;
+}
+
+/* Animations */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in-up 0.3s ease-out;
+}
+
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-[#58a6ff] focus:ring-offset-2 focus:ring-offset-[#0d1117];
+}
+
+/* Transition utility for hover states */
+.transition-base {
+  @apply transition-colors duration-150 ease-in-out;
 }
