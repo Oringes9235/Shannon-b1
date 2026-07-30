@@ -76,3 +76,11 @@ python scripts/saveTokenizer.py
 ```powershell
 python scripts/merge_txt.py
 ```
+
+## saveTrain_Loss.py
+保存训练集Loss曲线脚本
+
+```powershell
+python scripts/saveTrain_Loss.py
+```
+
