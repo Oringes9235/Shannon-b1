@@ -65,20 +65,20 @@ def test_long_sequence_generation():
                 if len(generated_tokens) % 50 == 0:
                     print(f"  已生成: {len(generated_tokens)} tokens")
             
-            print(f"✅ 成功生成 {len(generated_tokens)} 个token")
+            print(f"[92m[SUCCESS][0m 成功生成 {len(generated_tokens)} 个token")
             
             # 解码并显示部分文本
             decoded_text = tokenizer.decode(start_tokens + generated_tokens[:50])
             print(f"  前50个token的文本: {decoded_text[:100]}...")
             
         except Exception as e:
-            print(f"❌ 失败: {type(e).__name__}: {e}")
+            print(f"[91m[ERROR][0m 失败: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
             return False
     
     print("\n" + "="*70)
-    print("✅ 所有测试通过！模型支持动态扩展序列长度。")
+    print("[92m[SUCCESS][0m 所有测试通过！模型支持动态扩展序列长度。")
     print("="*70)
     return True
 

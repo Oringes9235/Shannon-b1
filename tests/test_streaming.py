@@ -79,10 +79,10 @@ def test_quick_consistency(model, tokenizer):
     print(f"Match:  {stream_tokens == normal_new}")
     
     if stream_tokens == normal_new:
-        print("✅ PASSED: 两种方法产生一致结果\n")
+        print("[92m[SUCCESS][0m PASSED: 两种方法产生一致结果\n")
         return True
     else:
-        print("❌ FAILED: 两种方法结果不一致\n")
+        print("[91m[ERROR][0m FAILED: 两种方法结果不一致\n")
         return False
 
 
@@ -146,10 +146,10 @@ def test_debug_logits(model, tokenizer):
     print(f"三者一致: {match}")
     
     if match:
-        print("✅ PASSED: 所有方法选择相同的token\n")
+        print("[92m[SUCCESS][0m PASSED: 所有方法选择相同的token\n")
         return True
     else:
-        print("❌ FAILED: token选择不一致\n")
+        print("[91m[ERROR][0m FAILED: token选择不一致\n")
         return False
 
 
@@ -205,10 +205,10 @@ def test_multiple_iterations(model, tokenizer):
             all_passed = False
     
     if all_passed:
-        print("✅ PASSED: 所有迭代都保持一致\n")
+        print("[92m[SUCCESS][0m PASSED: 所有迭代都保持一致\n")
         return True
     else:
-        print("❌ FAILED: 存在不一致的迭代\n")
+        print("[91m[ERROR][0m FAILED: 存在不一致的迭代\n")
         return False
 
 
@@ -264,10 +264,10 @@ def test_different_parameters(model, tokenizer):
             all_passed = False
     
     if all_passed:
-        print("✅ PASSED: 所有参数配置下都保持一致\n")
+        print("[92m[SUCCESS][0m PASSED: 所有参数配置下都保持一致\n")
         return True
     else:
-        print("❌ FAILED: 某些参数配置下不一致\n")
+        print("[91m[ERROR][0m FAILED: 某些参数配置下不一致\n")
         return False
 
 
@@ -280,7 +280,7 @@ def main():
     # 初始化
     print("\n初始化模型和分词器...")
     model, tokenizer = create_model_and_tokenizer()
-    print("✅ 初始化完成\n")
+    print("[92m[SUCCESS][0m 初始化完成\n")
     
     # 执行所有测试
     results = {}
@@ -299,7 +299,7 @@ def main():
     passed_tests = sum(results.values())
     
     for test_name, passed in results.items():
-        status = "✅ PASSED" if passed else "❌ FAILED"
+        status = "[92m[SUCCESS][0m PASSED" if passed else "[91m[ERROR][0m FAILED"
         print(f"{test_name:30s} {status}")
     
     print("-"*70)
@@ -307,10 +307,10 @@ def main():
     print("="*70)
     
     if passed_tests == total_tests:
-        print("\n🎉 所有测试通过！流式输出功能正常工作。")
+        print("\n[92m[OK][0m 所有测试通过！流式输出功能正常工作。")
         return 0
     else:
-        print(f"\n⚠️  {total_tests - passed_tests} 个测试失败，请检查上述错误信息。")
+        print(f"\n[93m[WARNING][0m  {total_tests - passed_tests} 个测试失败，请检查上述错误信息。")
         return 1
 
 

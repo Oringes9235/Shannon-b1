@@ -59,7 +59,7 @@ def test_streaming_realtime():
                             elapsed = time.time() - start_time
                             print()
                             print("-"*70)
-                            print(f"✅ 生成完成！")
+                            print(f"[92m[SUCCESS][0m 生成完成！")
                             print(f"   总耗时: {elapsed:.2f}秒")
                             print(f"   Token数量: {token_count}")
                             if elapsed > 0:
@@ -83,24 +83,24 @@ def test_streaming_realtime():
                               f"Text: ...{text_preview}")
                         
                     except json.JSONDecodeError as e:
-                        print(f"❌ JSON解析错误: {e}")
+                        print(f"[91m[ERROR][0m JSON解析错误: {e}")
                         print(f"   原始数据: {data_str[:100]}")
                         
     except requests.exceptions.RequestException as e:
-        print(f"❌ 请求失败: {e}")
+        print(f"[91m[ERROR][0m 请求失败: {e}")
         return False
     
     print()
     print("="*70)
     
     if token_count > 0:
-        print("✅ 测试通过：流式输出正常工作")
+        print("[92m[SUCCESS][0m 测试通过：流式输出正常工作")
         print()
         print("如果看到上面的逐行输出，说明流式功能正常。")
         print("每个token都应该有独立的时间戳。")
         return True
     else:
-        print("❌ 测试失败：没有接收到任何token")
+        print("[91m[ERROR][0m 测试失败：没有接收到任何token")
         return False
 
 

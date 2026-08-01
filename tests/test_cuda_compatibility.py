@@ -315,7 +315,7 @@ def print_summary(results):
     
     if all_passed:
         print()
-        print("  🎉 All tests passed! Your environment is ready for training.")
+        print("  [92m[OK][0m All tests passed! Your environment is ready for training.")
         print()
         print("  Quick start:")
         print("    python scripts/train.py")

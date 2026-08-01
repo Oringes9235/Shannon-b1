@@ -654,7 +654,7 @@ class ColoredTextTestRunner(unittest.TextTestRunner):
         print_header("Test Summary")
         
         if result.wasSuccessful():
-            print_success(f"All {result.testsRun} tests passed! 🎉")
+            print_success(f"All {result.testsRun} tests passed! [92m[OK][0m")
         else:
             print(f"\n{Colors.BOLD}Results:{Colors.END}")
             

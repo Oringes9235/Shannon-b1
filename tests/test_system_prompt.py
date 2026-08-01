@@ -27,7 +27,7 @@ def test_system_prompt_concatenation():
         "Hello, how are you?",
         "你是一个翻译专家"
     )
-    print("\n✅ 测试1.1 - 正常系统提示词:")
+    print("\n[92m[SUCCESS][0m 测试1.1 - 正常系统提示词:")
     print(f"   System: '你是一个翻译专家'")
     print(f"   User: 'Hello, how are you?'")
     print(f"   Result: '{result1}'")
@@ -37,7 +37,7 @@ def test_system_prompt_concatenation():
     
     # 测试用例2: 无系统提示词 (None)
     result2 = build_full_prompt("Hello", None)
-    print("\n✅ 测试1.2 - 系统提示词为None:")
+    print("\n[92m[SUCCESS][0m 测试1.2 - 系统提示词为None:")
     print(f"   System: None")
     print(f"   User: 'Hello'")
     print(f"   Result: '{result2}'")
@@ -46,7 +46,7 @@ def test_system_prompt_concatenation():
     
     # 测试用例3: 空字符串
     result3 = build_full_prompt("Hello", "")
-    print("\n✅ 测试1.3 - 系统提示词为空字符串:")
+    print("\n[92m[SUCCESS][0m 测试1.3 - 系统提示词为空字符串:")
     print(f"   System: ''")
     print(f"   User: 'Hello'")
     print(f"   Result: '{result3}'")
@@ -55,7 +55,7 @@ def test_system_prompt_concatenation():
     
     # 测试用例4: 纯空白字符
     result4 = build_full_prompt("Hello", "   ")
-    print("\n✅ 测试1.4 - 系统提示词为纯空白:")
+    print("\n[92m[SUCCESS][0m 测试1.4 - 系统提示词为纯空白:")
     print(f"   System: '   '")
     print(f"   User: 'Hello'")
     print(f"   Result: '{result4}'")
@@ -64,7 +64,7 @@ def test_system_prompt_concatenation():
     
     # 测试用例5: 带首尾空格的系统提示词
     result5 = build_full_prompt("Hello", "  测试  ")
-    print("\n✅ 测试1.5 - 系统提示词带首尾空格:")
+    print("\n[92m[SUCCESS][0m 测试1.5 - 系统提示词带首尾空格:")
     print(f"   System: '  测试  '")
     print(f"   User: 'Hello'")
     print(f"   Result: '{result5}'")
@@ -72,7 +72,7 @@ def test_system_prompt_concatenation():
     print("   ✓ 通过")
     
     print("\n" + "=" * 60)
-    print("🎉 所有拼接逻辑测试通过!")
+    print("[92m[OK][0m 所有拼接逻辑测试通过!")
     print("=" * 60)
 
 
@@ -94,7 +94,7 @@ def test_api_request_format():
         "repetition_penalty": 1.15
     }
     
-    print("\n✅ 测试2.1 - 完整请求体:")
+    print("\n[92m[SUCCESS][0m 测试2.1 - 完整请求体:")
     print(json.dumps(request_data, indent=2, ensure_ascii=False))
     
     # 验证字段存在
@@ -108,13 +108,13 @@ def test_api_request_format():
         "max_tokens": 100
     }
     
-    print("\n✅ 测试2.2 - 可选参数 (不含system_prompt):")
+    print("\n[92m[SUCCESS][0m 测试2.2 - 可选参数 (不含system_prompt):")
     print(json.dumps(request_data_optional, indent=2, ensure_ascii=False))
     assert "system_prompt" not in request_data_optional
     print("   ✓ system_prompt可以省略")
     
     print("\n" + "=" * 60)
-    print("🎉 API请求格式测试通过!")
+    print("[92m[OK][0m API请求格式测试通过!")
     print("=" * 60)
 
 
@@ -136,7 +136,7 @@ def test_cli_arguments():
         '--prompt', '你好'
     ])
     
-    print("\n✅ 测试3.1 - 带系统提示词的CLI调用:")
+    print("\n[92m[SUCCESS][0m 测试3.1 - 带系统提示词的CLI调用:")
     print(f"   --system-prompt: '{args_with_system.system_prompt}'")
     print(f"   --prompt: '{args_with_system.prompt}'")
     assert args_with_system.system_prompt == "你是一个助手"
@@ -146,14 +146,14 @@ def test_cli_arguments():
         '--prompt', '你好'
     ])
     
-    print("\n✅ 测试3.2 - 不带系统提示词的CLI调用:")
+    print("\n[92m[SUCCESS][0m 测试3.2 - 不带系统提示词的CLI调用:")
     print(f"   --system-prompt: {args_without_system.system_prompt}")
     print(f"   --prompt: '{args_without_system.prompt}'")
     assert args_without_system.system_prompt is None
     print("   ✓ 默认值为None")
     
     print("\n" + "=" * 60)
-    print("🎉 CLI参数测试通过!")
+    print("[92m[OK][0m CLI参数测试通过!")
     print("=" * 60)
 
 
@@ -168,21 +168,21 @@ def main():
         test_api_request_format()
         test_cli_arguments()
         
-        print("\n" + "✨" * 30)
-        print("🎊 所有测试通过! 系统提示词功能正常工作!")
-        print("✨" * 30 + "\n")
+        print("\n" + "[95m[HIGHLIGHT][0m" * 30)
+        print("[92m[OK][0m 所有测试通过! 系统提示词功能正常工作!")
+        print("[95m[HIGHLIGHT][0m" * 30 + "\n")
         
-        print("📝 使用说明:")
+        print("[90m[TOKEN][0m 使用说明:")
         print("   1. Web UI: 在'系统提示词'输入框中填写角色设定")
         print("   2. CLI: 使用 --system-prompt 参数")
         print("   3. API: 在请求体中包含 system_prompt 字段")
-        print("\n📖 详细文档: notebooks/SYSTEM_PROMPT_GUIDE.md\n")
+        print("\n[96m[READ][0m 详细文档: notebooks/SYSTEM_PROMPT_GUIDE.md\n")
         
     except AssertionError as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n[91m[ERROR][0m 测试失败: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ 未知错误: {e}")
+        print(f"\n[91m[ERROR][0m 未知错误: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

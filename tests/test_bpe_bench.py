@@ -28,4 +28,4 @@ for vocab_size in [500, 1000, 2000]:
     print(f"  样例: 'Hello world' -> tokens={tokens} -> '{decoded}'")
 
 print()
-print("✅ 所有测试通过！")
+print("[92m[SUCCESS][0m 所有测试通过！")

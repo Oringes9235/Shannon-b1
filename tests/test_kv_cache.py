@@ -46,7 +46,7 @@ def test_kv_cache_performance():
     max_new_tokens = 50
     
     # 测试1: 不使用KV Cache
-    print("\n📊 测试1: 不使用 KV Cache")
+    print("\n[94m[INFO][0m 测试1: 不使用 KV Cache")
     start_time = time.time()
     with torch.no_grad():
         result_no_cache = model.generate(
@@ -64,7 +64,7 @@ def test_kv_cache_performance():
     print(f"   速度: {speed_no_cache:.2f} tokens/秒")
     
     # 测试2: 使用KV Cache
-    print("\n📊 测试2: 使用 KV Cache")
+    print("\n[94m[INFO][0m 测试2: 使用 KV Cache")
     start_time = time.time()
     with torch.no_grad():
         result_with_cache = model.generate(
@@ -86,7 +86,7 @@ def test_kv_cache_performance():
     improvement = ((time_no_cache - time_with_cache) / time_no_cache) * 100
     
     print("\n" + "=" * 80)
-    print("📈 性能对比结果:")
+    print("[94m[INFO][0m 性能对比结果:")
     print("=" * 80)
     print(f"   无KV Cache: {time_no_cache:.3f}s ({speed_no_cache:.2f} tok/s)")
     print(f"   有KV Cache: {time_with_cache:.3f}s ({speed_with_cache:.2f} tok/s)")
@@ -95,7 +95,7 @@ def test_kv_cache_performance():
     print("=" * 80)
     
     # 验证结果一致性（由于采样的随机性，结果可能不同）
-    print("\n✅ 注意: 由于采样随机性，两次生成的token序列可能不同")
+    print("\n[92m[SUCCESS][0m 注意: 由于采样随机性，两次生成的token序列可能不同")
     print(f"   这是正常现象，不影响性能测试结果")
     
     return {
@@ -110,7 +110,7 @@ def test_streaming_with_kv_cache():
     """测试流式生成与KV Cache的结合"""
     
     print("\n\n" + "=" * 80)
-    print("🔄 测试流式生成 + KV Cache")
+    print("[94m[LOADING][0m 测试流式生成 + KV Cache")
     print("=" * 80)
     
     config = ModelConfig(
@@ -158,7 +158,7 @@ def test_streaming_with_kv_cache():
 
 
 if __name__ == '__main__':
-    print("🚀 Shannon-b1 KV Cache 性能测试")
+    print("[95m[START][0m Shannon-b1 KV Cache 性能测试")
     print("=" * 80)
     
     # 运行性能测试
@@ -167,4 +167,4 @@ if __name__ == '__main__':
     # 运行流式生成测试
     test_streaming_with_kv_cache()
     
-    print("\n✅ 所有测试完成!")
+    print("\n[92m[SUCCESS][0m 所有测试完成!")

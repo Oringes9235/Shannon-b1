@@ -76,5 +76,5 @@ assert t4.get_vocab_size() >= 1000, f"Vocab not growing: {t4.get_vocab_size()}"
 print(f"  Special tokens: {t4.special_tokens}")
 
 print("\n" + "=" * 60)
-print("✅ 所有测试通过！")
+print("[92m[SUCCESS][0m 所有测试通过！")
 print("=" * 60)

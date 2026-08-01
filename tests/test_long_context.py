@@ -69,7 +69,7 @@ def test_rope_extrapolation():
         print(f"      显存占用: {memory_mb:.1f} MB")
         print(f"      输出形状: {logits.shape}")
     
-    print("\n✅ RoPE外推测试完成")
+    print("\n[92m[SUCCESS][0m RoPE外推测试完成")
 
 
 def test_alibi_bias():
@@ -112,7 +112,7 @@ def test_alibi_bias():
     print(f"\n   第一个头的偏置矩阵（前8x8）:")
     print(alibi_bias[0, :8, :8])
     
-    print("\n✅ ALiBi测试完成")
+    print("\n[92m[SUCCESS][0m ALiBi测试完成")
 
 
 def test_sliding_window():
@@ -164,14 +164,14 @@ def test_sliding_window():
         vis_str += "\n"
     print(vis_str)
     
-    print("\n✅ 滑动窗口测试完成")
+    print("\n[92m[SUCCESS][0m 滑动窗口测试完成")
 
 
 def compare_position_encodings():
     """对比不同位置编码方案"""
     
     print("\n\n" + "=" * 80)
-    print("📊 测试4: 位置编码方案对比")
+    print("[94m[INFO][0m 测试4: 位置编码方案对比")
     print("=" * 80)
     
     seq_len = 2048
@@ -228,7 +228,7 @@ def compare_position_encodings():
     
     # 汇总对比
     print("\n\n" + "=" * 80)
-    print("📈 性能对比总结")
+    print("[94m[INFO][0m 性能对比总结")
     print("=" * 80)
     print(f"{'方案':<25} {'耗时(s)':<15} {'显存(MB)':<15}")
     print("-" * 80)
@@ -241,7 +241,7 @@ def test_long_context_generation():
     """测试长上下文生成"""
     
     print("\n\n" + "=" * 80)
-    print("🔄 测试5: 长上下文生成能力")
+    print("[94m[LOADING][0m 测试5: 长上下文生成能力")
     print("=" * 80)
     
     config = ModelConfig(
@@ -291,11 +291,11 @@ def test_long_context_generation():
     print(f"   生成速度: {speed:.2f} tokens/秒")
     print(f"   总序列长度: {len(generated)}")
     
-    print("\n✅ 长上下文生成测试完成")
+    print("\n[92m[SUCCESS][0m 长上下文生成测试完成")
 
 
 if __name__ == '__main__':
-    print("🚀 Shannon-b1 长上下文（1M+）优化测试")
+    print("[95m[START][0m Shannon-b1 长上下文（1M+）优化测试")
     print("=" * 80)
     
     # 运行所有测试
@@ -306,5 +306,5 @@ if __name__ == '__main__':
     test_long_context_generation()
     
     print("\n\n" + "=" * 80)
-    print("✅ 所有长上下文测试完成!")
+    print("[92m[SUCCESS][0m 所有长上下文测试完成!")
     print("=" * 80)
