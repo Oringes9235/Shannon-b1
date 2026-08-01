@@ -19,7 +19,7 @@ try:
     TENSORBOARD_AVAILABLE = True
 except ImportError:
     TENSORBOARD_AVAILABLE = False
-    print("⚠️ TensorBoard not available. Install with: pip install tensorboard")
+    print("[93m[WARNING][0m TensorBoard not available. Install with: pip install tensorboard")
 
 
 class ImprovedTrainer:
@@ -75,7 +75,7 @@ class ImprovedTrainer:
                     # 较旧版本：GradScaler不接受device_type参数
                     self.scaler = amp.GradScaler()
                 except Exception as e:
-                    print(f"⚠️ Failed to initialize GradScaler: {e}")
+                    print(f"[93m[WARNING][0m Failed to initialize GradScaler: {e}")
                     print("   Disabling mixed precision training")
                     self.use_amp = False
                     self.scaler = None
@@ -132,7 +132,7 @@ class ImprovedTrainer:
                     from torch.cuda.amp import autocast as cuda_autocast
                     return cuda_autocast()
                 except Exception as e:
-                    print(f"⚠️ Failed to create autocast context: {e}")
+                    print(f"[93m[WARNING][0m Failed to create autocast context: {e}")
                     print("   Falling back to no autocast")
                     from contextlib import nullcontext
                     return nullcontext()
@@ -323,7 +323,7 @@ class ImprovedTrainer:
             包含训练历史记录的字典
         """
         print("\n" + "=" * 70)
-        print("🚀 Starting Training")
+        print("[95m[START][0m Starting Training")
         print(f"   Device: {self.device.upper()}")
         print(f"   Mixed Precision: {'ON' if self.use_amp else 'OFF'}")
         print(f"   Gradient Accumulation: {self.grad_accum_steps}")
@@ -361,7 +361,7 @@ class ImprovedTrainer:
                 self.writer.add_scalar('train/lr_epoch', self.optimizer.param_groups[0]['lr'], epoch)
             
             # 输出进度
-            print(f"\n📊 Epoch {epoch+1}/{epochs}")
+            print(f"\n[94m[INFO][0m Epoch {epoch+1}/{epochs}")
             print(f"   Train Loss: {train_loss:.4f}")
             if val_loss > 0:
                 print(f"   Val Loss: {val_loss:.4f}")
@@ -374,7 +374,7 @@ class ImprovedTrainer:
                 self.best_val_loss = val_loss
                 self.best_epoch = epoch
                 self.save_checkpoint('checkpoints/shannon_b1_best.pt')
-                print(f"   💾 Saved best model (val_loss: {val_loss:.4f})")
+                print(f"   [94m[SAVE][0m Saved best model (val_loss: {val_loss:.4f})")
             
             # 定期保存检查点
             if (epoch + 1) % self.config.save_interval == 0:
@@ -382,14 +382,14 @@ class ImprovedTrainer:
             
             # 早停检查
             if val_loss > 0 and self.should_early_stop(val_loss):
-                print(f"\n🛑 Early stopping triggered after {epoch+1} epochs")
+                print(f"\n[91m[STOP][0m Early stopping triggered after {epoch+1} epochs")
                 print(f"   Best val loss: {self.best_val_loss:.4f} at epoch {self.best_epoch+1}")
                 break
             
             print("-" * 70)
         
         total_time = time.time() - self.start_time
-        print(f"\n✅ Training completed!")
+        print(f"\n[92m[SUCCESS][0m Training completed!")
         print(f"   Total time: {total_time / 60:.1f} minutes")
         print(f"   Best val loss: {self.best_val_loss:.4f}")
         
@@ -456,7 +456,7 @@ class ImprovedTrainer:
             setattr(parent, target, lora_obj)
         if use_lora and hasattr(self.model, 'unmerge_lora_weights'):
             self.model.unmerge_lora_weights()
-        print(f"   💾 Checkpoint saved: {path}")
+        print(f"   [94m[SAVE][0m Checkpoint saved: {path}")
     
     def load_checkpoint(self, path: str):
         """
@@ -473,7 +473,7 @@ class ImprovedTrainer:
             checkpoint = torch.load(path, map_location=self.device)
         except Exception as e:
             # 如果受限于 safe globals，提醒用户并重抛
-            print(f"⚠️ Failed to load checkpoint with weights_only=False: {e}")
+            print(f"[93m[WARNING][0m Failed to load checkpoint with weights_only=False: {e}")
             raise
         ckpt_state = checkpoint.get('model_state_dict', {})
 
@@ -497,38 +497,38 @@ class ImprovedTrainer:
 
         # 用更新后的 state_dict 加载（包含被跳过的原始参数）
         self.model.load_state_dict(model_state)
-        print(f"✅ Loaded model weights: {len(matched_keys)} params matched, {len(skipped_keys)} skipped")
+        print(f"[92m[SUCCESS][0m Loaded model weights: {len(matched_keys)} params matched, {len(skipped_keys)} skipped")
 
         # 如果存在被跳过的参数（形状不匹配），不要加载 optimizer/scheduler/scaler 状态
         if skipped_keys:
-            print("⚠️ Some parameters were skipped due to shape mismatch; skipping optimizer/scheduler/scaler state load to avoid errors.")
+            print("[93m[WARNING][0m Some parameters were skipped due to shape mismatch; skipping optimizer/scheduler/scaler state load to avoid errors.")
         else:
             # 尝试加载优化器和调度器状态，如果不兼容则跳过并提示
             try:
                 if 'optimizer_state_dict' in checkpoint and checkpoint['optimizer_state_dict'] is not None:
                     self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-                    print("✅ Optimizer state loaded")
+                    print("[92m[SUCCESS][0m Optimizer state loaded")
             except Exception as e:
-                print(f"⚠️ Could not load optimizer state (skipped): {e}")
+                print(f"[93m[WARNING][0m Could not load optimizer state (skipped): {e}")
 
             try:
                 if self.scheduler and checkpoint.get('scheduler_state_dict'):
                     self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-                    print("✅ Scheduler state loaded")
+                    print("[92m[SUCCESS][0m Scheduler state loaded")
             except Exception as e:
-                print(f"⚠️ Could not load scheduler state (skipped): {e}")
+                print(f"[93m[WARNING][0m Could not load scheduler state (skipped): {e}")
 
             try:
                 if self.scaler and checkpoint.get('scaler_state_dict'):
                     self.scaler.load_state_dict(checkpoint['scaler_state_dict'])
-                    print("✅ AMP scaler state loaded")
+                    print("[92m[SUCCESS][0m AMP scaler state loaded")
             except Exception as e:
-                print(f"⚠️ Could not load scaler state (skipped): {e}")
+                print(f"[93m[WARNING][0m Could not load scaler state (skipped): {e}")
         
         self.history = checkpoint.get('history', self.history)
         self.best_val_loss = checkpoint.get('best_val_loss', float('inf'))
         self.best_epoch = checkpoint.get('best_epoch', 0)
         self.global_step = checkpoint.get('global_step', 0)
         
-        print(f"✅ Loaded checkpoint: {path}")
+        print(f"[92m[SUCCESS][0m Loaded checkpoint: {path}")
         print(f"   Best val loss: {self.best_val_loss:.4f} (Epoch {self.best_epoch+1})")

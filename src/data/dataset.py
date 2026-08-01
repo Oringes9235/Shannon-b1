@@ -35,7 +35,7 @@ class TextDataset(Dataset):
                 if len(seq) == seq_len + 1:
                     self.data.append(seq)
         
-        print(f"📊 Dataset created: {len(self.data)} sequences")
+        print(f"[94m[INFO][0m Dataset created: {len(self.data)} sequences")
     
     def __len__(self) -> int:
         """返回数据集中序列的数量"""
@@ -93,7 +93,7 @@ class StreamingTextDataset(Dataset):
             if len(seq) == self.seq_len + 1:
                 self.data.append(seq)
         
-        print(f"📊 Streaming dataset: {len(self.data)} sequences from {filepath}")
+        print(f"[94m[INFO][0m Streaming dataset: {len(self.data)} sequences from {filepath}")
     
     def __len__(self):
         """返回数据集中序列的数量"""

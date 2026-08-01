@@ -159,7 +159,7 @@ add_line()
 try:
     with open(log_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(output_lines))
-    print(f'\n✅ Log successfully saved to: {log_file}')
+    print(f'\n[92m[SUCCESS][0m Log successfully saved to: {log_file}')
     print(f'   File size: {log_file.stat().st_size:,} bytes')
 except Exception as e:
-    print(f'\n❌ Failed to save log: {e}')
+    print(f'\n[91m[ERROR][0m Failed to save log: {e}')

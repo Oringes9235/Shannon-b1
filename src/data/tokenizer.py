@@ -41,7 +41,7 @@ class CharTokenizer:
         self.char_to_idx = {ch: i for i, ch in enumerate(all_chars)}
         self.idx_to_char = {i: ch for ch, i in self.char_to_idx.items()}
         
-        print(f"✅ CharTokenizer: {len(self.char_to_idx)} chars")
+        print(f"\033[92m[SUCCESS]\033[0m CharTokenizer: {len(self.char_to_idx)} chars")
         return self
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
@@ -164,7 +164,7 @@ class BPETokenizer:
         
         if verbose:
             real_vocab = self._hf.get_vocab_size()
-            print(f"✅ BPE: {real_vocab} tokens")
+            print(f"\033[92m[SUCCESS]\033[0m BPE: {real_vocab} tokens")
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:
         if not text:
@@ -451,7 +451,7 @@ class SimpleBPETokenizer:
         self.char_to_idx = {ch: i for i, ch in enumerate(all_chars)}
         self.idx_to_char = {i: ch for ch, i in self.char_to_idx.items()}
         
-        print(f"✅ SimpleBPETokenizer: {len(self.char_to_idx)} chars")
+        print(f"\033[92m[SUCCESS]\033[0m SimpleBPETokenizer: {len(self.char_to_idx)} chars")
         return self
     
     def encode(self, text: str, add_bos: bool = False, add_eos: bool = False) -> List[int]:

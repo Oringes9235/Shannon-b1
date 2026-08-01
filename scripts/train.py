@@ -84,7 +84,7 @@ def main():
         try:
             from src.utils import get_cuda_info
             cuda_info = get_cuda_info()
-            print(f"\n🔧 CUDA Environment:")
+            print(f"\n[93m[CONFIG][0m CUDA Environment:")
             print(f"   CUDA Version: {cuda_info['cuda_version']}")
             print(f"   cuDNN Version: {cuda_info['cudnn_version']}")
             print(f"   Device Count: {cuda_info['device_count']}")
@@ -95,7 +95,7 @@ def main():
                 print(f"      Total Memory: {device['memory_total'] / 1024**3:.2f} GB")
             print()
         except Exception as e:
-            print(f"⚠️ Could not retrieve detailed CUDA info: {e}")
+            print(f"[93m[WARNING][0m Could not retrieve detailed CUDA info: {e}")
             print(f"GPU: {torch.cuda.get_device_name(0)}")
             print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB\n")
     
@@ -103,16 +103,16 @@ def main():
         if args.getdata == 'shakespeare':
             download_shakespeare()
         else:
-            print(f"❌ Unknown dataset: {args.getdata}")
+            print(f"[91m[ERROR][0m Unknown dataset: {args.getdata}")
             print("   Available: shakespeare")
 
-    print("📚 Loading data...")
+    print("[96m[LOAD][0m Loading data...")
     texts = load_all_data()
     total_chars = sum(len(t) for t in texts)
     
     # 大数据集 (>50MB) 且使用 BPE 时，使用分块流式训练
     if args.tokenizer == 'bpe' and total_chars > 50_000_000:
-        print(f"📊 Large dataset detected ({total_chars:,} chars), using streaming BPE training...")
+        print(f"[94m[INFO][0m Large dataset detected ({total_chars:,} chars), using streaming BPE training...")
         tokenizer = create_tokenizer_streaming(
             tokenizer_type='bpe',
             vocab_size=args.vocab_size,
@@ -161,7 +161,7 @@ def main():
         use_alibi=args.use_alibi,
     )
     
-    print("\n🏗️ Creating model...")
+    print("\n[96m[BUILD][0m Creating model...")
     model = ShannonB1(config).to(args.device)
     
     total_params = sum(p.numel() for p in model.parameters())
@@ -169,7 +169,7 @@ def main():
     print(f"   Size: {total_params * 4 / 1024 / 1024:.2f} MB")
     
     if args.lora:
-        print("\n🔧 Applying LoRA...")
+        print("\n[93m[CONFIG][0m Applying LoRA...")
         model.apply_lora(
             rank=args.lora_rank,
             alpha=args.lora_alpha,
@@ -206,7 +206,7 @@ def main():
         if os.path.exists(args.resume):
             trainer.load_checkpoint(args.resume)
         else:
-            print(f"⚠️ Resume checkpoint not found: {args.resume}")
+            print(f"[93m[WARNING][0m Resume checkpoint not found: {args.resume}")
 
     history = trainer.train(args.epochs)
     
@@ -218,8 +218,8 @@ def main():
     trainer.save_checkpoint(versioned_path)
     tokenizer.save(versioned_path.replace('.pt', '_tokenizer.json'))
     
-    print(f"\n💾 Saved: {versioned_path}")
-    print(f"📋 Architecture: {arch_version}")
+    print(f"\n[94m[SAVE][0m Saved: {versioned_path}")
+    print(f"[94m[TEMPLATE][0m Architecture: {arch_version}")
     
     return history
 

@@ -97,7 +97,7 @@ def single_generate(model, tokenizer, args):
     """单次生成模式"""
     print(f"\n{'='*60}")
     if args.system_prompt:
-        print(f"🤖 System Prompt: {args.system_prompt}")
+        print(f"[94m[BOT][0m System Prompt: {args.system_prompt}")
         print(f"{'-'*60}")
     print(f"💬 User Prompt: {args.prompt}")
     print(f"{'='*60}\n")
@@ -116,7 +116,7 @@ def single_generate(model, tokenizer, args):
     generated_tokens = list(start_tokens)
     start_time = time.time()
 
-    print("🚀 开始流式生成:\n")
+    print("[95m[START][0m 开始流式生成:\n")
     print(f"{args.prompt}", end="", flush=True)
 
     try:
@@ -151,14 +151,14 @@ def single_generate(model, tokenizer, args):
         elapsed = time.time() - start_time
         tokens_gen = len(generated_tokens) - prompt_len
         print(f"\n\n{'='*60}")
-        print("✅ 生成完成!")
-        print(f"📊 统计: {tokens_gen} tokens / {elapsed:.2f}s / {tokens_gen/elapsed:.1f} t/s")
+        print("[92m[SUCCESS][0m 生成完成!")
+        print(f"[94m[INFO][0m 统计: {tokens_gen} tokens / {elapsed:.2f}s / {tokens_gen/elapsed:.1f} t/s")
         print(f"{'='*60}")
 
     except KeyboardInterrupt:
-        print("\n\n⚠️  用户中断生成")
+        print("\n\n[93m[WARNING][0m  用户中断生成")
     except Exception as e:
-        print(f"\n\n❌ 生成出错: {e}")
+        print(f"\n\n[91m[ERROR][0m 生成出错: {e}")
 
 
 def interactive_chat(model, tokenizer, args):
@@ -168,16 +168,16 @@ def interactive_chat(model, tokenizer, args):
     if args.load_conv:
         try:
             conv = Conversation.from_json(args.load_conv)
-            print(f"📂 已加载对话历史: {args.load_conv}")
+            print(f"[96m[LOAD][0m 已加载对话历史: {args.load_conv}")
             print(f"   消息数: {len(conv)}")
             if conv.system_prompt:
                 print(f"   系统提示词: {conv.system_prompt}")
             for msg in conv.history[-6:]:
-                icon = "🧑" if msg.role == "user" else "🤖"
+                icon = "[95m[HUMAN][0m" if msg.role == "user" else "[94m[BOT][0m"
                 preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
                 print(f"   {icon} [{msg.role}]: {preview}")
         except Exception as e:
-            print(f"⚠️  加载对话失败: {e}")
+            print(f"[93m[WARNING][0m  加载对话失败: {e}")
             print("   将创建新对话")
             conv = Conversation(
                 system_prompt=args.system_prompt,
@@ -192,12 +192,12 @@ def interactive_chat(model, tokenizer, args):
         )
 
     print(f"\n{'='*60}")
-    print("🤖 Shannon-b1 多轮对话模式")
+    print("[94m[BOT][0m Shannon-b1 多轮对话模式")
     print(f"{'='*60}")
-    print(f"📋 模板: {args.conv_template}")
+    print(f"[94m[TEMPLATE][0m 模板: {args.conv_template}")
     if conv.system_prompt:
-        print(f"🎯 系统提示词: {conv.system_prompt}")
-    print(f"📐 最大上下文: {args.max_context} 字符")
+        print(f"[92m[SYSTEM][0m 系统提示词: {conv.system_prompt}")
+    print(f"[93m[CONFIG][0m 最大上下文: {args.max_context} 字符")
     print(f"\n命令:")
     print(f"  /clear          清空对话历史（保留系统提示词）")
     print(f"  /save [path]    保存对话到文件")
@@ -209,7 +209,7 @@ def interactive_chat(model, tokenizer, args):
 
     while True:
         try:
-            user_input = input("🧑 你: ").strip()
+            user_input = input("[95m[HUMAN][95m 你: ").strip()
             if not user_input:
                 continue
 
@@ -220,36 +220,36 @@ def interactive_chat(model, tokenizer, args):
                 cmd_arg = cmd[1] if len(cmd) > 1 else ""
 
                 if command == "/exit":
-                    save_prompt = input("💾 是否保存当前对话? (y/n, 默认n): ").strip().lower()
+                    save_prompt = input("[94m[SAVE][0m 是否保存当前对话? (y/n, 默认n): ").strip().lower()
                     if save_prompt == "y":
                         filename = args.save_path or f"conversation_{time.strftime('%Y%m%d_%H%M%S')}.json"
                         conv.to_json(filename)
-                        print(f"✅ 对话已保存到: {filename}")
-                    print("👋 再见!")
+                        print(f"[92m[SUCCESS][0m 对话已保存到: {filename}")
+                    print("[94m[BYE][0m 再见!")
                     break
 
                 elif command == "/clear":
                     conv.clear(keep_system=True)
-                    print("🗑️  对话历史已清空（系统提示词保留）")
+                    print("[91m[CLEAR][0m  对话历史已清空（系统提示词保留）")
 
                 elif command == "/save":
                     filename = cmd_arg or args.save_path or f"conversation_{time.strftime('%Y%m%d_%H%M%S')}.json"
                     conv.to_json(filename)
-                    print(f"✅ 对话已保存到: {filename}")
+                    print(f"[92m[SUCCESS][0m 对话已保存到: {filename}")
 
                 elif command == "/history":
                     print(f"\n{'─'*50}")
-                    print(f"📜 对话历史 ({len(conv)} 条消息):")
+                    print(f"[96m[HISTORY][0m 对话历史 ({len(conv)} 条消息):")
                     print(f"{'─'*50}")
                     for i, msg in enumerate(conv.messages):
-                        icon = {"system": "⚙️", "user": "🧑", "assistant": "🤖"}.get(msg.role, "❓")
+                        icon = {"system": "[93m[CONFIG][0m", "user": "[95m[HUMAN][0m", "assistant": "[94m[BOT][0m"}.get(msg.role, "[91m[UNKNOWN][0m")
                         print(f"  [{i}] {icon} {msg.role}: {msg.content[:120]}")
                     print(f"{'─'*50}\n")
 
                 elif command == "/system":
                     if cmd_arg:
                         conv.add_system(cmd_arg)
-                        print(f"✅ 系统提示词已更新: {cmd_arg}")
+                        print(f"[92m[SUCCESS][0m 系统提示词已更新: {cmd_arg}")
                     else:
                         print(f"当前系统提示词: {conv.system_prompt or '(无)'}")
 
@@ -257,7 +257,7 @@ def interactive_chat(model, tokenizer, args):
                     total_chars = sum(len(m.content) for m in conv.messages)
                     user_msgs = sum(1 for m in conv.messages if m.role == "user")
                     assistant_msgs = sum(1 for m in conv.messages if m.role == "assistant")
-                    print(f"\n📊 对话统计:")
+                    print(f"\n[94m[INFO][0m 对话统计:")
                     print(f"   总消息数: {len(conv)}")
                     print(f"   用户消息: {user_msgs}")
                     print(f"   助手消息: {assistant_msgs}")
@@ -266,7 +266,7 @@ def interactive_chat(model, tokenizer, args):
                     print(f"   最大上下文: {args.max_context}\n")
 
                 else:
-                    print(f"❓ 未知命令: {command}")
+                    print(f"[91m[UNKNOWN][0m 未知命令: {command}")
                     print("   可用命令: /clear /save /history /system /stats /exit")
 
                 continue
@@ -290,7 +290,7 @@ def interactive_chat(model, tokenizer, args):
             new_text = ""
             printed_len = 0
 
-            print("🤖 助手: ", end="", flush=True)
+            print("[94m[BOT][0m 助手: ", end="", flush=True)
 
             try:
                 for token_id, probability in model.generate_stream(
@@ -324,10 +324,10 @@ def interactive_chat(model, tokenizer, args):
 
                 elapsed = time.time() - start_time
                 tokens_gen = len(generated_tokens) - prompt_len
-                print(f"\n   ⏱️  {tokens_gen} tokens / {elapsed:.2f}s / {tokens_gen/elapsed:.1f} t/s\n")
+                print(f"\n   [94m[TIME][0m  {tokens_gen} tokens / {elapsed:.2f}s / {tokens_gen/elapsed:.1f} t/s\n")
 
             except KeyboardInterrupt:
-                print("\n⚠️  生成中断")
+                print("\n[93m[WARNING][0m  生成中断")
                 if new_text:
                     partial = _extract_assistant_reply(
                         tokenizer.decode(generated_tokens).replace("</w>", " ").replace("  ", " "),
@@ -336,10 +336,10 @@ def interactive_chat(model, tokenizer, args):
                     conv.add_assistant(partial + " [中断]")
 
         except KeyboardInterrupt:
-            print("\n\n👋 再见!")
+            print("\n\n[94m[BYE][0m 再见!")
             break
         except EOFError:
-            print("\n\n👋 再见!")
+            print("\n\n[94m[BYE][0m 再见!")
             break
 
 
@@ -386,14 +386,14 @@ def main():
 
     args = parser.parse_args()
 
-    print("🔄 加载模型...")
+    print("[94m[LOADING][0m 加载模型...")
     model, tokenizer, config = load_model(args.model_path, args.device)
 
     if args.interactive:
         interactive_chat(model, tokenizer, args)
     else:
-        print(f"✅ 模型加载完成: vocab={config.vocab_size}, d_model={config.d_model}")
-        print(f"📝 分词器类型: {'BPE' if hasattr(tokenizer, 'merges') else 'Char'}")
+        print(f"[92m[SUCCESS][0m 模型加载完成: vocab={config.vocab_size}, d_model={config.d_model}")
+        print(f"[90m[TOKEN][0m 分词器类型: {'BPE' if hasattr(tokenizer, 'merges') else 'Char'}")
         single_generate(model, tokenizer, args)
 
 

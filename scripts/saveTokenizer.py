@@ -46,6 +46,6 @@ else:
 
 # 保存
 tokenizer.save(OUTPUT_PATH)
-print(f"\n✅ 分词器已保存: {OUTPUT_PATH}")
+print(f"\n[92m[SUCCESS][0m 分词器已保存: {OUTPUT_PATH}")
 print(f"   vocab_size={tokenizer.get_vocab_size()}")
 print(f"   special_tokens={tokenizer.special_tokens}")

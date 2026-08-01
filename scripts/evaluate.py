@@ -123,7 +123,7 @@ def main():
     print("=" * 60)
     
     # 加载模型
-    print("\n📦 Loading model...")
+    print("\n[96m[MODEL][0m Loading model...")
     model, tokenizer, config = load_model(args.model_path, args.device)
     
     # 统计参数量
@@ -131,7 +131,7 @@ def main():
     print(f"   Total parameters: {total_params:,}")
     
     # 加载测试数据
-    print("\n📚 Loading test data...")
+    print("\n[96m[LOAD][0m Loading test data...")
     if args.test_file and os.path.exists(args.test_file):
         with open(args.test_file, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -149,13 +149,13 @@ def main():
     print(f"   Test samples: {len(dataset)}")
     
     # 评估
-    print("\n🔍 Evaluating...")
+    print("\n[96m[EVAL][0m Evaluating...")
     criterion = torch.nn.CrossEntropyLoss()
     results = evaluate(model, dataloader, criterion, args.device)
     
     # 输出结果
     print("\n" + "=" * 60)
-    print("📊 Evaluation Results")
+    print("[94m[INFO][0m Evaluation Results")
     print("=" * 60)
     print(f"   Loss: {results['loss']:.4f}")
     print(f"   Perplexity: {results['perplexity']:.2f}")

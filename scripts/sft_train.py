@@ -99,11 +99,11 @@ def train_sft(
     """SFT 微调主函数"""
     
     print("=" * 60)
-    print("🚀 Shannon-b1 SFT Fine-tuning")
+    print("[95m[START][0m Shannon-b1 SFT Fine-tuning")
     print("=" * 60)
     
     # 加载模型
-    print("📦 Loading model...")
+    print("[96m[MODEL][0m Loading model...")
     ckpt = torch.load(model_path, map_location='cpu', weights_only=False)
     config = ckpt['config']
     model = ShannonB1(config).to(device)
@@ -112,13 +112,13 @@ def train_sft(
     print(f"   Parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     # 加载分词器
-    print("📝 Loading tokenizer...")
+    print("[90m[TOKEN][0m Loading tokenizer...")
     tokenizer = BPETokenizer(vocab_size=config.vocab_size)
     tokenizer.load(tokenizer_path)
     print(f"   Vocab size: {tokenizer.get_vocab_size()}")
     
     # 加载数据
-    print("📚 Loading SFT data...")
+    print("[96m[LOAD][0m Loading SFT data...")
     dataset = SFTDataset(data_path, tokenizer, seq_len)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     print(f"   Batches: {len(dataloader)}")
@@ -128,7 +128,7 @@ def train_sft(
     
     # 训练
     print(f"\n{'=' * 60}")
-    print(f"🏋️ Starting SFT Training")
+    print(f"[95m[TRAIN][0m Starting SFT Training")
     print(f"   Epochs: {epochs}")
     print(f"   Batch size: {batch_size}")
     print(f"   Learning rate: {lr}")
@@ -176,7 +176,7 @@ def train_sft(
             pbar.set_postfix({'loss': f'{loss.item():.2f}'})
         
         avg_loss = total_loss / len(dataloader)
-        print(f"\n📊 SFT Epoch {epoch+1}/{epochs} - Avg Loss: {avg_loss:.4f}\n")
+        print(f"\n[94m[INFO][0m SFT Epoch {epoch+1}/{epochs} - Avg Loss: {avg_loss:.4f}\n")
         
         # 保存最佳模型
         if avg_loss < best_loss:
@@ -186,13 +186,13 @@ def train_sft(
                 'config': config,
                 'sft_loss': avg_loss,
             }, save_path)
-            print(f"💾 Saved best model: {save_path}")
+            print(f"[94m[SAVE][0m Saved best model: {save_path}")
     
     # 保存分词器
     tokenizer_path_out = save_path.replace('.pt', '_tokenizer.json')
     tokenizer.save(tokenizer_path_out)
     
-    print(f"\n✅ SFT completed!")
+    print(f"\n[92m[SUCCESS][0m SFT completed!")
     print(f"   Best loss: {best_loss:.4f}")
     print(f"   Model saved: {save_path}")
 

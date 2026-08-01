@@ -36,7 +36,7 @@ def read_file_safe(filepath):
             return f.read(), encoding
     except (UnicodeDecodeError, UnicodeError):
         # 如果检测的编码失败，尝试用 errors='replace' 强制读取
-        print(f"    ⚠️ 编码 {encoding} 失败，使用 replace 模式读取")
+        print(f"    [93m[WARNING][0m 编码 {encoding} 失败，使用 replace 模式读取")
         with open(filepath, 'r', encoding=encoding, errors='replace') as f:
             return f.read(), f"{encoding}(replace)"
 
@@ -53,12 +53,12 @@ def merge_txt_files():
         has_chardet = True
     except ImportError:
         has_chardet = False
-        print("⚠️ 未安装 chardet，编码检测准确度会降低")
+        print("[93m[WARNING][0m 未安装 chardet，编码检测准确度会降低")
         print("   建议安装: pip install chardet\n")
     
     # 检查 txt 目录是否存在
     if not os.path.exists(txt_dir):
-        print(f"❌ 未找到 txt 目录: {txt_dir}")
+        print(f"[91m[ERROR][0m 未找到 txt 目录: {txt_dir}")
         print("请在包含 txt 文件夹的目录下运行此脚本")
         input("按回车键退出...")
         return
@@ -70,7 +70,7 @@ def merge_txt_files():
     ])
     
     if not txt_files:
-        print(f"❌ txt 目录下没有 .txt 文件")
+        print(f"[91m[ERROR][0m txt 目录下没有 .txt 文件")
         input("按回车键退出...")
         return
     
@@ -117,7 +117,7 @@ def merge_txt_files():
                 
                 except Exception as e:
                     fail_files.append((fname, str(e)))
-                    print(f"\n  ⚠️ 跳过 {fname}: {e}")
+                    print(f"\n  [93m[WARNING][0m 跳过 {fname}: {e}")
                     continue
         
         print()  # 换行
@@ -125,19 +125,19 @@ def merge_txt_files():
         # 最终报告
         output_mb = os.path.getsize(output_file) / (1024 * 1024)
         print(f"\n{'=' * 60}")
-        print(f"✅ 合并完成!")
+        print(f"[92m[SUCCESS][0m 合并完成!")
         print(f"   输出文件: {output_file}")
         print(f"   文件大小: {output_mb:.2f} MB")
         print(f"   成功合并: {success_count}/{len(txt_files)} 个文件")
         print(f"   输出编码: UTF-8")
         
         if fail_files:
-            print(f"\n⚠️ 跳过的文件:")
+            print(f"\n[93m[WARNING][0m 跳过的文件:")
             for fname, reason in fail_files:
                 print(f"   - {fname}: {reason}")
     
     except Exception as e:
-        print(f"\n❌ 合并失败: {e}")
+        print(f"\n[91m[ERROR][0m 合并失败: {e}")
     
     input("\n按回车键退出...")
 

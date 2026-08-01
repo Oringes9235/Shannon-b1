@@ -15,10 +15,10 @@ def download_shakespeare(save_path: str = 'data/shakespeare.txt') -> str:
         urllib.request.urlretrieve(url, save_path)
         with open(save_path, 'r', encoding='utf-8') as f:
             text = f.read()
-        print(f"✅ Downloaded Shakespeare: {len(text):,} chars")
+        print(f"[92m[SUCCESS][0m Downloaded Shakespeare: {len(text):,} chars")
         return save_path
     except Exception as e:
-        print(f"⚠️ Download failed: {e}")
+        print(f"[93m[WARNING][0m Download failed: {e}")
         return None
 
 
@@ -27,14 +27,14 @@ def load_shakespeare() -> str:
     if os.path.exists(local_path):
         with open(local_path, 'r', encoding='utf-8') as f:
             text = f.read()
-        print(f"✅ Loaded local Shakespeare: {len(text):,} chars from {local_path}")
+        print(f"[92m[SUCCESS][0m Loaded local Shakespeare: {len(text):,} chars from {local_path}")
         return text
 
     path = download_shakespeare()
     if path:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
-    print("⚠️ Using fallback sample text (download failed and no local file found).")
+    print("[93m[WARNING][0m Using fallback sample text (download failed and no local file found).")
     return "To be or not to be, that is the question. " * 1000
 
 
@@ -50,18 +50,18 @@ def load_all_data(data_dir: str = 'data') -> list:
                             content = f.read()
                         if content.strip():
                             texts.append(content)
-                            print(f"✅ Loaded: {fpath} ({len(content):,} chars)")
+                            print(f"[92m[SUCCESS][0m Loaded: {fpath} ({len(content):,} chars)")
                     except Exception as e:
-                        print(f"⚠️  Skip {fpath}: {e}")
+                        print(f"[93m[WARNING][0m  Skip {fpath}: {e}")
 
     if not texts:
-        print("⚠️  No .txt files found in data/, using fallback text")
+        print("[93m[WARNING][0m  No .txt files found in data/, using fallback text")
         sample_path = create_sample_data()
         with open(sample_path, 'r', encoding='utf-8') as f:
             texts.append(f.read())
 
     total = sum(len(t) for t in texts)
-    print(f"\n📚 Total: {len(texts)} files, {total:,} chars")
+    print(f"\n[96m[LOAD][0m Total: {len(texts)} files, {total:,} chars")
     return texts
 
 
@@ -86,7 +86,7 @@ def load_data_chunks(data_dir: str = 'data', chunk_size: int = 1_000_000):
             if fname.lower().endswith('.txt'):
                 fpath = os.path.join(root, fname)
                 total = os.path.getsize(fpath)
-                print(f"📖 Streaming: {fpath} ({total:,} bytes)")
+                print(f"[96m[READ][0m Streaming: {fpath} ({total:,} bytes)")
                 with open(fpath, 'r', encoding='utf-8') as f:
                     while True:
                         chunk = f.read(chunk_size)
@@ -94,7 +94,7 @@ def load_data_chunks(data_dir: str = 'data', chunk_size: int = 1_000_000):
                             break
                         count += 1
                         yield chunk
-    print(f"✅ Yielded {count} chunks for training")
+    print(f"[92m[SUCCESS][0m Yielded {count} chunks for training")
 
 
 def create_sample_data(save_path: str = 'data/sample.txt') -> str:
@@ -112,5 +112,5 @@ she said, "I have been waiting for you." And so began Alice's greatest adventure
     with open(save_path, 'w', encoding='utf-8') as f:
         f.write(sample_text)
     
-    print(f"✅ Sample data created: {save_path}")
+    print(f"[92m[SUCCESS][0m Sample data created: {save_path}")
     return save_path

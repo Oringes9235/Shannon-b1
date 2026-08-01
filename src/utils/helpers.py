@@ -65,7 +65,7 @@ def get_cuda_info() -> dict:
             info['devices'].append(device_info)
             
     except Exception as e:
-        print(f"⚠️ Error getting CUDA info: {e}")
+        print(f"[93m[WARNING][0m Error getting CUDA info: {e}")
     
     return info
 
