@@ -96,10 +96,11 @@ class CharTokenizer:
 
 class BPETokenizer:
     """
-    BPE分词器 — 双模式实现
+    BPE分词器 — 多模式实现
     
     - 训练模式：使用 HuggingFace tokenizers (Rust)，速度极快
     - 回退模式：加载旧版 checkpoint tokenizer 时使用 Python BPE 逻辑确保 ID 一致
+    - 字符模式：加载 char_to_idx 格式的字符级 tokenizer
     """
     
     def __init__(self, vocab_size: int = 5000):
@@ -123,6 +124,11 @@ class BPETokenizer:
         self._legacy_vocab: Dict[str, int] = {}
         self._legacy_idx_to_token: Dict[int, str] = {}
         self._legacy_merges: Dict[Tuple[str, str], int] = {}
+        
+        # 字符模式（加载 char_to_idx 格式）
+        self._char_mode = False
+        self._char_to_idx: Dict[str, int] = {}
+        self._idx_to_char: Dict[int, str] = {}
         
         # 兼容外部访问
         self.merges: Dict[Tuple[str, str], int] = {}
@@ -153,6 +159,7 @@ class BPETokenizer:
         
         self._hf.train_from_iterator(texts, trainer=trainer)
         self._legacy_mode = False
+        self._char_mode = False
         self._rebuild_mappings()
         
         if verbose:
@@ -163,7 +170,9 @@ class BPETokenizer:
         if not text:
             return []
         
-        if self._legacy_mode:
+        if self._char_mode:
+            token_ids = [self._char_to_idx.get(ch, self.special_tokens.get('<UNK>', 1)) for ch in text]
+        elif self._legacy_mode:
             token_ids = self._legacy_encode(text)
         else:
             enc = self._hf.encode(text)
@@ -213,20 +222,13 @@ class BPETokenizer:
         
         return token_ids
     
-    # def decode(self, tokens: List[int], skip_special: bool = True) -> str:
-    #     if skip_special:
-    #         skip_ids = {v for k, v in self.special_tokens.items() if k in ['<PAD>', '<BOS>', '<EOS>']}
-    #         tokens = [t for t in tokens if t not in skip_ids]
-        
-    #     if self._legacy_mode:
-    #         return self._legacy_decode(tokens)
-    #     else:
-    #         return self._hf.decode(tokens)
-    
     def decode(self, tokens: List[int], skip_special: bool = True) -> str:
         """
         将token序列解码为文本（修复词间粘连）
         """
+        if self._char_mode:
+            return self._char_decode(tokens, skip_special)
+            
         words: List[str] = []
         current_word: List[str] = []
         
@@ -263,6 +265,16 @@ class BPETokenizer:
         text = re.sub(r'\s+', ' ', text).strip()
         return text
     
+    def _char_decode(self, tokens: List[int], skip_special: bool = True) -> str:
+        """字符模式解码"""
+        chars = []
+        for t in tokens:
+            ch = self._idx_to_char.get(t, '<UNK>')
+            if skip_special and ch in self.special_tokens:
+                continue
+            chars.append(ch)
+        return ''.join(chars)
+    
     def _legacy_decode(self, tokens: List[int]) -> str:
         """旧版解码"""
         chars = []
@@ -283,6 +295,8 @@ class BPETokenizer:
         return text
     
     def get_vocab_size(self) -> int:
+        if self._char_mode:
+            return len(self._char_to_idx)
         if self._legacy_mode:
             return len(self._legacy_vocab) + len(self.special_tokens)
         return self._hf.get_vocab_size()
@@ -296,9 +310,10 @@ class BPETokenizer:
     
     def load(self, path: str):
         """
-        加载分词器，支持两种格式:
+        加载分词器，支持三种格式:
         1. HuggingFace tokenizer JSON (新格式，有 "model" 键)
         2. 旧版自定义 JSON (有 "vocab" + "merges" 键) → 回退模式
+        3. 字符级 JSON (有 "char_to_idx" 键) → 字符模式
         """
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -307,14 +322,48 @@ class BPETokenizer:
             # HF 格式
             self._hf = HFTokenizer.from_file(path)
             self._legacy_mode = False
+            self._char_mode = False
             self._rebuild_mappings()
             
         elif "vocab" in data and "merges" in data:
             # 旧版自定义格式 → 回退模式，确保 token ID 一致
             self._load_legacy_format(data)
+            self._char_mode = False
+            
+        elif "char_to_idx" in data:
+            # 字符级格式 → 字符模式
+            self._load_char_format(data)
             
         else:
             raise ValueError(f"Unknown tokenizer format in {path}. Keys: {list(data.keys())}")
+    
+    def _load_char_format(self, data: dict):
+        """
+        加载字符级 JSON 格式（由 CharTokenizer.save() 生成）
+        
+        {
+            "char_to_idx": {"<PAD>": 0, "<UNK>": 1, ...},
+            "special_tokens": {"<PAD>": 0, ...}
+        }
+        """
+        self._char_mode = True
+        self._legacy_mode = False
+        
+        self._char_to_idx = data["char_to_idx"]
+        self._idx_to_char = {}
+        for ch, idx in self._char_to_idx.items():
+            if isinstance(idx, str):
+                idx = int(idx)
+            self._idx_to_char[idx] = ch
+        
+        self.special_tokens = data.get("special_tokens", {
+            '<PAD>': 0, '<UNK>': 1, '<BOS>': 2, '<EOS>': 3,
+        })
+        
+        # 同步外部访问
+        self.vocab = dict(self._char_to_idx)
+        self.idx_to_token = dict(self._idx_to_char)
+        self.merges = {}
     
     def _load_legacy_format(self, data: dict):
         """
@@ -328,6 +377,7 @@ class BPETokenizer:
         }
         """
         self._legacy_mode = True
+        self._char_mode = False
         
         # 词表
         self._legacy_vocab = data["vocab"]

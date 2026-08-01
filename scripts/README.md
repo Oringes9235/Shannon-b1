@@ -84,3 +84,17 @@ python scripts/merge_txt.py
 python scripts/saveTrain_Loss.py
 ```
 
+## sft_train.py
+模型微调训练脚本
+
+```powershell
+python scripts/sft_train.py `
+  --model-path checkpoints/shannon_b1_best.pt `
+  --tokenizer-path checkpoints/shannon_b1_best_tokenizer.json `
+  --data-path dataset/qaset.txt `
+  --save-path checkpoints/shannon_b1_sft.pt `
+  --epochs 3 `
+  --batch-size 2 `
+  --lr 0.000005 `
+  --device cuda
+```

@@ -38,7 +38,7 @@ if expected_vocab_size and expected_vocab_size > 100:
         tokenizer = BPETokenizer(vocab_size=expected_vocab_size)
         tokenizer.train([combined_text], verbose=True)
 else:
-    # 小词汇表用字符级
+    # 小词汇表用字符级，保存为 BPETokenizer 兼容的 HF 格式
     print(f"训练 CharTokenizer (target {expected_vocab_size or 1000})...")
     tokenizer = CharTokenizer()
     combined_text = "\n\n".join(texts) if texts else "sample text"

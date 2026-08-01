@@ -148,8 +148,16 @@ class ImprovedTrainer:
         total_loss = 0
         num_batches = 0
         
-        # 进度条
-        pbar = tqdm(self.dataloader, desc="Training")
+        # 进度条（使用 ASCII 风格，避免 Windows 下显示问题，数字固定小数位防止抖动）
+        # n 的显示宽度固定为 total 的位数，保证 n/total 整体长度不变，进度条不会变形
+        total_batches = len(self.dataloader)
+        n_width = len(str(total_batches))
+        bar_format = (
+            "{desc}: {percentage:3.0f}% [{bar}] "
+            "{n:>" + str(n_width) + "d}/{total} "
+            "[{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+        )
+        pbar = tqdm(self.dataloader, desc="Training", ascii=".#", bar_format=bar_format)
         self.optimizer.zero_grad()
         
         for batch_idx, (inputs, targets) in enumerate(pbar):
@@ -197,9 +205,12 @@ class ImprovedTrainer:
                 if self.scheduler and hasattr(self.scheduler, 'step_per_batch'):
                     self.scheduler.step_per_batch()
             
-            # 更新进度条
+            # 更新进度条（loss 固定保留 2 位小数，lr 已为 .2e 格式，rate_fmt 由 tqdm 自动 .2f）
             current_lr = self.optimizer.param_groups[0]['lr']
-            pbar.set_postfix({'loss': loss.item() * self.grad_accum_steps, 'lr': f'{current_lr:.2e}'})
+            pbar.set_postfix({
+                'loss': f'{loss.item() * self.grad_accum_steps:.2f}',
+                'lr': f'{current_lr:.2e}',
+            })
             
             # TensorBoard 记录 (每 N 步)
             if self.writer and self.global_step % self.config.log_interval == 0:
@@ -224,7 +235,14 @@ class ImprovedTrainer:
         total_loss = 0
         num_batches = 0
         
-        pbar = tqdm(self.val_dataloader, desc="Validating")
+        total_batches = len(self.val_dataloader)
+        n_width = len(str(total_batches))
+        bar_format = (
+            "{desc}: {percentage:3.0f}% [{bar}] "
+            "{n:>" + str(n_width) + "d}/{total} "
+            "[{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+        )
+        pbar = tqdm(self.val_dataloader, desc="Validating", ascii=".#", bar_format=bar_format)
         for inputs, targets in pbar:
             inputs = inputs.to(self.device)
             targets = targets.to(self.device)
@@ -244,7 +262,7 @@ class ImprovedTrainer:
             
             total_loss += loss.item()
             num_batches += 1
-            pbar.set_postfix({'val_loss': loss.item()})
+            pbar.set_postfix({'val_loss': f'{loss.item():.2f}'})
         
         return total_loss / num_batches
 
